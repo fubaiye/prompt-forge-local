@@ -1,0 +1,14 @@
+.git
+.github
+.agents
+.codex
+node_modules
+dist
+build
+release
+.vite
+*.log
+*.exe
+data/*.json
+!data/.gitkeep
+docs/superpowers

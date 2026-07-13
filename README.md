@@ -26,7 +26,68 @@ npm run start
 npm run pack:win
 ```
 
-安装包输出在 `release/`，文件名类似 `PromptForge-Setup-0.1.0-x64.exe`。安装版会从 GitHub Releases 检查新版本；右上角出现“更新到 x.y.z”后，点击即可下载并安装更新。
+安装包输出在 `release/`，文件名类似 `PromptForge-Setup-0.1.1-x64.exe`。安装版会从 GitHub Releases 检查新版本；右上角出现“更新到 x.y.z”后，点击即可下载并安装更新。
+
+## NAS Docker 部署
+
+适合群晖 DSM 的 Container Manager，或者任意支持 Docker Compose 的 NAS。
+
+1. 在 NAS 文件管理器里进入共享文件夹的 `docker` 目录。
+2. 如果已经有 `prompt-forge` 文件夹，进入它；如果没有，新建一个。
+3. 用 SSH 进入 NAS，然后进入该目录，例如：
+
+```bash
+cd /volume1/docker/prompt-forge
+```
+
+4. 首次部署时拉取仓库代码：
+
+```bash
+git clone https://github.com/fubaiye/prompt-forge-local.git .
+```
+
+如果目录里已经有项目文件，跳过这一步。
+
+5. 启动容器：
+
+```bash
+docker compose up -d --build
+```
+
+6. 浏览器打开：
+
+```text
+http://你的NAS局域网IP:8787
+```
+
+数据会保存在 NAS 的 `prompt-forge/data` 目录里，包括 API Provider 和历史记录。该目录不会提交到 GitHub。
+
+### Docker 版更新
+
+右上角会检查 GitHub Release 并提示有新版本。Docker 部署建议在 NAS SSH 里执行下面命令更新：
+
+```bash
+cd /volume1/docker/prompt-forge
+git pull --ff-only
+docker compose up -d --build
+```
+
+如果你在 DSM 的 Container Manager 里操作，也可以进入项目，重新构建并启动 `prompt-forge` 服务。
+
+## NAS PM2 部署
+
+如果你希望右上角点击更新后由服务端自动执行更新命令，推荐用 PM2 裸机部署：
+
+```bash
+cd /volume1/docker/prompt-forge
+npm ci
+npm run build
+npm install -g pm2
+PROMPT_FORGE_HOST=0.0.0.0 PROMPT_FORGE_PORT=8787 PROMPT_FORGE_UPDATE_COMMAND="git pull --ff-only && npm ci && npm run build && pm2 restart prompt-forge" pm2 start build/server/index.mjs --name prompt-forge
+pm2 save
+```
+
+未配置 `PROMPT_FORGE_UPDATE_COMMAND` 时，点击更新会打开 GitHub Release 页面，避免服务端执行未知命令。
 
 ## GitHub Release 发版
 
@@ -39,24 +100,6 @@ git push --tags
 ```
 
 Actions 会运行测试、构建 Windows 安装包，并把安装包发布到 GitHub Release。安装版和 NAS 部署版都会以最新 GitHub Release 作为更新源。
-
-## NAS 部署
-
-在 NAS 上克隆仓库后：
-
-```bash
-npm ci
-npm run build
-PROMPT_FORGE_HOST=0.0.0.0 PROMPT_FORGE_PORT=8787 npm run start
-```
-
-NAS 页面右上角会检查 GitHub Release。要启用“一键自动更新”，给服务进程配置 `PROMPT_FORGE_UPDATE_COMMAND`，例如：
-
-```bash
-PROMPT_FORGE_UPDATE_COMMAND="git pull --ff-only && npm ci && npm run build && pm2 restart prompt-forge"
-```
-
-如果未配置该变量，点击更新会打开 GitHub Release 页面，避免服务端执行未知命令。
 
 ## 本地数据
 
