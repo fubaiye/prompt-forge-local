@@ -1,0 +1,15 @@
+services:
+  prompt-forge:
+    image: ghcr.io/fubaiye/prompt-forge-local:latest
+    container_name: prompt-forge
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      PROMPT_FORGE_HOST: 0.0.0.0
+      PROMPT_FORGE_PORT: 8787
+      PROMPT_FORGE_DATA_DIR: /app/data
+      PROMPT_FORGE_CLIENT_DIST: /app/dist
+      PROMPT_FORGE_GITHUB_REPO: fubaiye/prompt-forge-local
+    volumes:
+      - ./data:/app/data

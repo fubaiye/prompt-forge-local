@@ -34,26 +34,28 @@ npm run pack:win
 
 1. 在 NAS 文件管理器里进入共享文件夹的 `docker` 目录。
 2. 如果已经有 `prompt-forge` 文件夹，进入它；如果没有，新建一个。
-3. 用 SSH 进入 NAS，然后进入该目录，例如：
+3. 在 Container Manager 里创建项目，存放路径选择 `共享文件夹/docker/prompt-forge`。
+4. 如果不想 SSH 或拉源码，在 Compose 配置里直接粘贴：
 
-```bash
-cd /volume1/docker/prompt-forge
+```yaml
+services:
+  prompt-forge:
+    image: ghcr.io/fubaiye/prompt-forge-local:latest
+    container_name: prompt-forge
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      PROMPT_FORGE_HOST: 0.0.0.0
+      PROMPT_FORGE_PORT: 8787
+      PROMPT_FORGE_DATA_DIR: /app/data
+      PROMPT_FORGE_CLIENT_DIST: /app/dist
+      PROMPT_FORGE_GITHUB_REPO: fubaiye/prompt-forge-local
+    volumes:
+      - ./data:/app/data
 ```
 
-4. 首次部署时拉取仓库代码：
-
-```bash
-git clone https://github.com/fubaiye/prompt-forge-local.git .
-```
-
-如果目录里已经有项目文件，跳过这一步。
-
-5. 启动容器：
-
-```bash
-docker compose up -d --build
-```
-
+5. 点“立即部署”。
 6. 浏览器打开：
 
 ```text
@@ -64,7 +66,9 @@ http://你的NAS局域网IP:8787
 
 ### Docker 版更新
 
-右上角会检查 GitHub Release 并提示有新版本。Docker 部署建议在 NAS SSH 里执行下面命令更新：
+右上角会检查 GitHub Release 并提示有新版本。Docker 部署建议在 Container Manager 里重建项目，或者在 Compose 页面重新部署，让 NAS 重新拉取 `ghcr.io/fubaiye/prompt-forge-local:latest`。
+
+如果你愿意用 SSH，也可以执行：
 
 ```bash
 cd /volume1/docker/prompt-forge
@@ -72,7 +76,7 @@ git pull --ff-only
 docker compose up -d --build
 ```
 
-如果你在 DSM 的 Container Manager 里操作，也可以进入项目，重新构建并启动 `prompt-forge` 服务。
+使用 `docker-compose.nas.yml` 时不需要源码；使用 `docker-compose.yml` 时会在 NAS 本地构建镜像。
 
 ## NAS PM2 部署
 
