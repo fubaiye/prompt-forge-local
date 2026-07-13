@@ -1,16 +1,35 @@
-import { Check, Copy, RefreshCw, Sparkles, Zap } from "lucide-react";
+import { Check, Copy, Download, Expand, FileText, RefreshCw, Save, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
+import type { HistoryItem } from "../../../shared/types";
+import { Button, Card, EmptyState, Tabs } from "./ui";
 
 interface ResultPanelProps {
   prompt: string;
   error: string;
   isGenerating: boolean;
   canRegenerate: boolean;
+  history: HistoryItem[];
+  onPromptChange(value: string): void;
   onRegenerate(): void;
+  onRestore(item: HistoryItem): void;
+  onDeleteHistory(id: string): void;
 }
 
-export function ResultPanel({ prompt, error, isGenerating, canRegenerate, onRegenerate }: ResultPanelProps) {
+export function ResultPanel({
+  prompt,
+  error,
+  isGenerating,
+  canRegenerate,
+  history,
+  onPromptChange,
+  onRegenerate,
+  onRestore,
+  onDeleteHistory,
+}: ResultPanelProps) {
+  const [activeTab, setActiveTab] = useState("result");
   const [copied, setCopied] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success">("idle");
+  const [fullscreen, setFullscreen] = useState(false);
 
   async function copyPrompt() {
     if (!prompt) return;
@@ -19,63 +38,115 @@ export function ResultPanel({ prompt, error, isGenerating, canRegenerate, onRege
     window.setTimeout(() => setCopied(false), 1400);
   }
 
+  function downloadPrompt() {
+    if (!prompt) return;
+    const blob = new Blob([prompt], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "system-prompt.md";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function markSaved() {
+    if (!prompt) return;
+    setSaveStatus("success");
+    window.setTimeout(() => setSaveStatus("idle"), 1600);
+  }
+
   return (
-    <section className="panel result-panel" aria-label="生成结果">
-      <div className="result-toolbar">
+    <Card className={fullscreen ? "result-panel fullscreen" : "result-panel"} aria-label="生成结果">
+      <div className="result-header">
         <div>
-          <h2>
-            <Zap size={22} />
-            生成结果
-          </h2>
-          <p>拷走使用，或存到历史记录以后复用。</p>
+          <span>OUTPUT</span>
+          <h2>结果工作区</h2>
         </div>
-        <div className="tool-group">
-          <button type="button" className="icon-button" onClick={copyPrompt} disabled={!prompt} title="复制">
-            {copied ? <Check size={17} /> : <Copy size={17} />}
-          </button>
-          <button type="button" className="icon-button" onClick={onRegenerate} disabled={!canRegenerate || isGenerating} title="重新生成">
-            <RefreshCw size={17} />
-          </button>
-        </div>
+        <Tabs
+          value={activeTab}
+          onChange={setActiveTab}
+          tabs={[
+            { value: "result", label: "结果" },
+            { value: "history", label: "历史版本", count: history.length },
+          ]}
+        />
       </div>
 
-      {error && <div className="error-box">{error}</div>}
+      {activeTab === "result" ? (
+        <>
+          <div className="editor-toolbar" aria-label="结果操作">
+            <Button type="button" variant="icon" onClick={copyPrompt} disabled={!prompt} title="复制">
+              {copied ? <Check size={17} /> : <Copy size={17} />}
+            </Button>
+            <Button type="button" variant="icon" onClick={downloadPrompt} disabled={!prompt} title="下载">
+              <Download size={17} />
+            </Button>
+            <Button type="button" variant="icon" onClick={onRegenerate} disabled={!canRegenerate || isGenerating} title="重新生成">
+              <RefreshCw size={17} />
+            </Button>
+            <Button type="button" variant="icon" onClick={() => setFullscreen((value) => !value)} title="全屏">
+              <Expand size={17} />
+            </Button>
+            <Button type="button" variant="secondary" status={saveStatus} onClick={markSaved} disabled={!prompt} title="保存版本">
+              <Save size={16} />
+              {saveStatus === "success" ? "已保存" : "保存版本"}
+            </Button>
+          </div>
 
-      <div className="prompt-window">
-        <div className="prompt-window-title">
-          <span className="dot red" />
-          <span className="dot yellow" />
-          <span className="dot green" />
-          <strong>SYSTEM-PROMPT.MD</strong>
-        </div>
-        <div className="prompt-surface">
-          {isGenerating && !prompt ? (
-            <div className="skeleton-stack" aria-label="正在生成">
-              <span />
-              <span />
-              <span />
-              <span />
+          {error && <div className="error-box">{error}</div>}
+
+          <div className="editor-shell">
+            <div className="editor-titlebar">
+              <FileText size={15} />
+              <span>system-prompt.md</span>
             </div>
-          ) : prompt ? (
-            <pre>{prompt}</pre>
-          ) : (
-            <div className="empty-result">
-              <div className="empty-sigil">
-                <Sparkles size={38} />
+            {isGenerating && !prompt ? (
+              <div className="skeleton-stack" aria-label="正在生成">
+                <span />
+                <span />
+                <span />
+                <span />
               </div>
-              <p>结果将在这里显示</p>
-              <span>左侧填需求、选大脑模型和下游任务，点「锻造 System Prompt」，一秒出结果。</span>
+            ) : prompt ? (
+              <textarea
+                className="prompt-editor"
+                value={prompt}
+                onChange={(event) => onPromptChange(event.target.value)}
+                spellCheck={false}
+                aria-label="System Prompt 编辑器"
+              />
+            ) : (
+              <EmptyState
+                icon={<Sparkles size={24} />}
+                title="结果将在这里显示"
+                description="左侧完成配置后点击生成，内容会以 Markdown 编辑器形式显示。"
+              />
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="history-tab">
+          {history.length === 0 ? (
+            <EmptyState icon={<Save size={24} />} title="暂无历史版本" description="生成成功后会自动保存到本机历史。" />
+          ) : (
+            <div className="history-list">
+              {history.map((item) => (
+                <article key={item.id} className="history-row">
+                  <button type="button" onClick={() => onRestore(item)}>
+                    <strong>{item.requirement}</strong>
+                    <span>
+                      {item.targetModel} · {item.taskCategory} · {new Date(item.createdAt).toLocaleString()}
+                    </span>
+                  </button>
+                  <Button type="button" variant="icon" onClick={() => onDeleteHistory(item.id)} title="删除历史">
+                    <Trash2 size={16} />
+                  </Button>
+                </article>
+              ))}
             </div>
           )}
         </div>
-      </div>
-
-      <div className="result-footer">
-        <p className="result-note">AI 生成仅供骨架，建议人工复核关键约束与 few-shot 示例再上线。</p>
-        <button type="button" className="ghost-save" disabled>
-          {prompt ? "已存历史" : "存到历史"}
-        </button>
-      </div>
-    </section>
+      )}
+    </Card>
   );
 }

@@ -1,19 +1,8 @@
-import {
-  Cpu,
-  Eye,
-  ImageIcon,
-  PencilLine,
-  Settings,
-  SlidersHorizontal,
-  Sparkles,
-  Type,
-  Video,
-  Wand2,
-  type LucideIcon,
-} from "lucide-react";
+import { Brain, Eye, FileText, ImageIcon, PencilLine, Search, Settings, Type, Video, Wand2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { TARGET_MODELS, TASK_CATEGORIES } from "../../../shared/modelCatalog";
 import type { DownstreamModel, GenerateRequest, MaskedProvider, ModelFamily, TaskCategory } from "../../../shared/types";
+import { Button, Card, ModelItem, SelectCard } from "./ui";
 
 interface ForgePanelProps {
   form: GenerateRequest;
@@ -27,14 +16,14 @@ interface ForgePanelProps {
   onOpenSettings(): void;
 }
 
-const taskIcons: Record<TaskCategory, LucideIcon> = {
-  none: Type,
+const taskIcon = {
+  none: FileText,
   text2img: ImageIcon,
   img2img: ImageIcon,
   edit: PencilLine,
   text2video: Video,
   img2video: Video,
-};
+} satisfies Record<TaskCategory, typeof FileText>;
 
 export function ForgePanel({
   form,
@@ -49,19 +38,20 @@ export function ForgePanel({
 }: ForgePanelProps) {
   const [vendorFilter, setVendorFilter] = useState("all");
   const [familyFilter, setFamilyFilter] = useState<ModelFamily | "all">("all");
+  const [modelQuery, setModelQuery] = useState("");
 
   const vendors = useMemo(() => Array.from(new Set(TARGET_MODELS.map((model) => model.vendor))).sort(), []);
   const selectedTarget = TARGET_MODELS.find((model) => model.value === form.targetModel);
-  const targetModels = useMemo(
-    () =>
-      TARGET_MODELS.filter((model) => {
-        if (form.visionEnabled && !model.vision) return false;
-        if (vendorFilter !== "all" && model.vendor !== vendorFilter) return false;
-        if (familyFilter !== "all" && model.family !== familyFilter) return false;
-        return true;
-      }),
-    [familyFilter, form.visionEnabled, vendorFilter],
-  );
+  const targetModels = useMemo(() => {
+    const query = modelQuery.trim().toLowerCase();
+    return TARGET_MODELS.filter((model) => {
+      if (form.visionEnabled && !model.vision) return false;
+      if (vendorFilter !== "all" && model.vendor !== vendorFilter) return false;
+      if (familyFilter !== "all" && model.family !== familyFilter) return false;
+      if (!query) return true;
+      return [model.label, model.vendor, model.value, model.tag ?? ""].join(" ").toLowerCase().includes(query);
+    });
+  }, [familyFilter, form.visionEnabled, modelQuery, vendorFilter]);
 
   function setVisionEnabled(visionEnabled: boolean) {
     const patch: Partial<GenerateRequest> = { visionEnabled };
@@ -72,42 +62,35 @@ export function ForgePanel({
   }
 
   return (
-    <section className="panel forge-panel" aria-label="提示词锻造控制台">
-      <div className="terminal-heading">
-        <div>
-          <h2>
-            <Cpu size={22} />
-            参数配置
-          </h2>
-          <p>告诉 Forge 要炼什么，它给你锻出 System Prompt。</p>
+    <Card className="forge-panel" aria-label="提示词配置栏">
+      <div className="forge-scroll">
+        <div className="panel-title">
+          <div>
+            <span>CONFIGURATION</span>
+            <h2>参数配置</h2>
+          </div>
+          <Brain size={20} />
         </div>
-        <span>
-          //
-          <br />
-          CONFIG.TERMINAL
-        </span>
-      </div>
 
-      <div className="forge-section">
-        <div className="section-label pink-dot">需求 / 使用场景</div>
-        <textarea
-          value={form.requirement}
-          onChange={(event) => onChange({ requirement: event.target.value })}
-          placeholder="参考图1的表达方式及颜色，将图2变成一样的，字体清晰无锯齿"
-          rows={5}
-        />
-        <div className="micro-row">
-          <span>写清角色、任务、输出风格、限制，提示词更贴。</span>
-          <span>{form.requirement.trim().length} chars</span>
-        </div>
-      </div>
+        <section className="config-section">
+          <div className="section-heading">
+            <strong>需求 / 使用场景</strong>
+            <span>{form.requirement.trim().length} chars</span>
+          </div>
+          <textarea
+            value={form.requirement}
+            onChange={(event) => onChange({ requirement: event.target.value })}
+            placeholder="例如：我要一个能帮我写小红书美妆种草文案的助手，风格活泼，每条不超过 200 字。"
+            rows={5}
+          />
+          <p className="field-help">写清角色、任务、输出风格和限制，结果会更稳。</p>
+        </section>
 
-      <div className="divider" />
-
-      <div className="forge-section">
-        <div className="section-label cyan-dot">本地 API 接入</div>
-        <div className="api-grid">
-          <label>
+        <section className="config-section">
+          <div className="section-heading">
+            <strong>本地 API</strong>
+          </div>
+          <label className="field-block">
             <span>API Provider</span>
             <select value={form.providerId} onChange={(event) => onChange({ providerId: event.target.value })}>
               <option value="">选择本地 API</option>
@@ -118,7 +101,7 @@ export function ForgePanel({
               ))}
             </select>
           </label>
-          <label>
+          <label className="field-block">
             <span>调用模型</span>
             <input
               value={form.generationModel}
@@ -132,149 +115,142 @@ export function ForgePanel({
               ))}
             </datalist>
           </label>
-        </div>
-        {providers.length === 0 && (
-          <button className="secondary-action full" type="button" onClick={onOpenSettings}>
-            <Settings size={16} />
-            添加 OpenAI-Compatible API
-          </button>
+          {providers.length === 0 && (
+            <Button className="full-width" type="button" variant="secondary" onClick={onOpenSettings}>
+              <Settings size={16} />
+              添加 OpenAI-Compatible API
+            </Button>
+          )}
+        </section>
+
+        <section className="config-section">
+          <div className="section-heading">
+            <strong>大脑模型能力</strong>
+          </div>
+          <div className="select-card-list">
+            <SelectCard
+              icon={<Type size={18} />}
+              title="纯文本"
+              description="LLM 不看图片/视频，只处理文字输入。"
+              selected={!form.visionEnabled}
+              onClick={() => setVisionEnabled(false)}
+            />
+            <SelectCard
+              icon={<Eye size={18} />}
+              title="图像识别"
+              description="VLM 接收图片/视频输入，并需要明确读图规则。"
+              selected={form.visionEnabled}
+              onClick={() => setVisionEnabled(true)}
+            />
+          </div>
+        </section>
+
+        <section className="config-section">
+          <div className="section-heading">
+            <strong>目标大脑模型</strong>
+            <span>{targetModels.length} 可选</span>
+          </div>
+          <div className="model-filter-row">
+            <label className="search-field">
+              <Search size={16} />
+              <input value={modelQuery} onChange={(event) => setModelQuery(event.target.value)} placeholder="搜索模型或厂商" />
+            </label>
+            <select value={vendorFilter} onChange={(event) => setVendorFilter(event.target.value)} aria-label="厂商筛选">
+              <option value="all">全部厂商</option>
+              {vendors.map((vendor) => (
+                <option key={vendor} value={vendor}>
+                  {vendor}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="filter-chips" aria-label="模型类型筛选">
+            <button className={familyFilter === "all" ? "active" : ""} type="button" onClick={() => setFamilyFilter("all")}>
+              全部
+            </button>
+            <button className={familyFilter === "closed" ? "active" : ""} type="button" onClick={() => setFamilyFilter("closed")}>
+              闭源
+            </button>
+            <button className={familyFilter === "open" ? "active" : ""} type="button" onClick={() => setFamilyFilter("open")}>
+              开源
+            </button>
+          </div>
+          <div className="model-list" role="listbox" aria-label="目标模型列表">
+            {targetModels.map((model) => (
+              <ModelItem
+                key={model.value}
+                title={model.label}
+                vendor={model.vendor}
+                capability={model.vision ? "Vision" : "Text"}
+                meta={model.reasoning ? "Reasoning" : undefined}
+                tag={model.tag}
+                selected={form.targetModel === model.value}
+                onClick={() => onChange({ targetModel: model.value })}
+              />
+            ))}
+          </div>
+        </section>
+
+        <section className="config-section">
+          <div className="section-heading">
+            <strong>下游生成任务</strong>
+          </div>
+          <div className="select-card-list">
+            {TASK_CATEGORIES.map((task) => {
+              const Icon = taskIcon[task.key];
+              return (
+                <SelectCard
+                  key={task.key}
+                  icon={<Icon size={18} />}
+                  title={task.name}
+                  description={task.desc}
+                  selected={form.taskCategory === task.key}
+                  onClick={() => onChange({ taskCategory: task.key })}
+                />
+              );
+            })}
+          </div>
+        </section>
+
+        {form.taskCategory !== "none" && (
+          <section className="config-section">
+            <div className="section-heading">
+              <strong>下游模型</strong>
+              <span>{downstreamOptions.length} 可选</span>
+            </div>
+            <div className="model-list compact" role="listbox" aria-label="下游模型列表">
+              {downstreamOptions.map((model) => (
+                <ModelItem
+                  key={model.value}
+                  title={model.label}
+                  vendor={model.vendor}
+                  capability={model.category}
+                  tag={model.tag}
+                  selected={form.downstreamModel === model.value}
+                  onClick={() => onChange({ downstreamModel: model.value })}
+                />
+              ))}
+            </div>
+          </section>
         )}
       </div>
 
-      <div className="divider" />
-
-      <div className="forge-section">
-        <div className="section-label violet-dot">大脑模型能力</div>
-        <div className="ability-grid">
-          <button
-            type="button"
-            className={!form.visionEnabled ? "ability-card active" : "ability-card"}
-            onClick={() => setVisionEnabled(false)}
-          >
-            <Type size={17} />
-            <strong>纯文本</strong>
-            <span>LLM 不看图片/视频，只能读文字</span>
-          </button>
-          <button
-            type="button"
-            className={form.visionEnabled ? "ability-card active" : "ability-card"}
-            onClick={() => setVisionEnabled(true)}
-          >
-            <Eye size={17} />
-            <strong>图像识别</strong>
-            <span>VLM 会接收图片/视频输入，需明确读图规则</span>
-          </button>
-        </div>
-
-        <div className="model-terminal">
-          <div className="model-terminal-top">
-            <span>大脑模型 · {targetModels.length} 可选</span>
-            <div className="filter-pills" aria-label="模型过滤">
-              <button className={familyFilter === "all" ? "active" : ""} type="button" onClick={() => setFamilyFilter("all")}>
-                全部
-              </button>
-              <button className={familyFilter === "closed" ? "active" : ""} type="button" onClick={() => setFamilyFilter("closed")}>
-                闭源
-              </button>
-              <button className={familyFilter === "open" ? "active" : ""} type="button" onClick={() => setFamilyFilter("open")}>
-                开源
-              </button>
-              <select value={vendorFilter} onChange={(event) => setVendorFilter(event.target.value)} aria-label="厂商过滤">
-                <option value="all">全部厂商</option>
-                {vendors.map((vendor) => (
-                  <option key={vendor} value={vendor}>
-                    {vendor}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="model-card-grid">
-            {targetModels.map((model) => (
-              <button
-                key={model.value}
-                type="button"
-                className={form.targetModel === model.value ? "model-card active" : "model-card"}
-                onClick={() => onChange({ targetModel: model.value })}
-              >
-                <strong>{compactModelLabel(model.label)}</strong>
-                <span>
-                  {model.vendor.toUpperCase()} · {model.vision ? "VISION" : "TEXT"}
-                </span>
-                {model.tag && <em>{model.tag}</em>}
-                <Eye size={14} className="model-eye" />
-              </button>
-            ))}
-          </div>
-          {form.visionEnabled && <p className="filter-note">* 已过滤为支持视觉输入 (VLM) 的模型</p>}
-        </div>
+      <div className="forge-footer">
+        <Button
+          className="generate-button"
+          type="button"
+          variant="primary"
+          status={isGenerating ? "loading" : "idle"}
+          disabled={!canGenerate || isGenerating}
+          onClick={onGenerate}
+        >
+          <Wand2 size={17} />
+          {isGenerating ? "生成中..." : "生成 System Prompt"}
+        </Button>
+        <p className={canGenerate ? "footer-status ready" : "footer-status"}>
+          {canGenerate ? "配置已就绪，可以开始生成。" : "至少输入 4 个字，并选择 API Provider 与调用模型。"}
+        </p>
       </div>
-
-      <div className="divider" />
-
-      <div className="forge-section">
-        <div className="section-label cyan-dot">下游生成任务 <small>（选「不下发生成」即只写大脑 Prompt）</small></div>
-        <div className="task-grid">
-          {TASK_CATEGORIES.map((task) => {
-            const Icon = taskIcons[task.key];
-            return (
-              <button
-                key={task.key}
-                type="button"
-                className={form.taskCategory === task.key ? "task-card active" : "task-card"}
-                onClick={() => onChange({ taskCategory: task.key })}
-                title={task.desc}
-              >
-                <Icon size={20} />
-                <span>{task.name}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {form.taskCategory !== "none" && (
-        <div className="downstream-terminal">
-          <div className="downstream-heading">
-            <div>
-              <strong>{selectedTaskName(form.taskCategory)} · 选一个具体模型</strong>
-              <p>VLM 先解析参考图，再输出给下游模型的 prompt。</p>
-            </div>
-            <SlidersHorizontal size={16} />
-          </div>
-          <div className="downstream-grid">
-            {downstreamOptions.map((model) => (
-              <button
-                key={model.value}
-                type="button"
-                className={form.downstreamModel === model.value ? "downstream-card active" : "downstream-card"}
-                onClick={() => onChange({ downstreamModel: model.value })}
-              >
-                <strong>{model.label}</strong>
-                <span>{model.vendor.toUpperCase()}</span>
-                {model.tag && <em>{model.tag}</em>}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="divider" />
-
-      <button className="generate-button" type="button" disabled={!canGenerate || isGenerating} onClick={onGenerate}>
-        <Sparkles size={18} />
-        {isGenerating ? "锻造中..." : "锻造 System Prompt"}
-        <Wand2 size={18} />
-      </button>
-      {!canGenerate && !isGenerating && <p className="hint">至少输入 4 个字，并选择 API Provider 与调用模型。</p>}
-    </section>
+    </Card>
   );
-}
-
-function compactModelLabel(label: string): string {
-  return label.replace("Claude Opus ", "").replace("Claude Sonnet ", "").replace("Claude Haiku ", "");
-}
-
-function selectedTaskName(category: TaskCategory): string {
-  return TASK_CATEGORIES.find((task) => task.key === category)?.name ?? "下游任务";
 }

@@ -2,16 +2,68 @@
   "name": "prompt-forge-local",
   "private": true,
   "version": "0.1.0",
+  "description": "本地 AI System Prompt 生成工作台",
+  "author": "fubaiye",
+  "main": "desktop/main.cjs",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fubaiye/prompt-forge-local.git"
+  },
   "scripts": {
     "dev": "concurrently \"vite --host 127.0.0.1\" \"tsx watch server/src/index.ts\"",
     "dev:server": "tsx watch server/src/index.ts",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && npm run build:client && npm run build:server",
+    "build:client": "vite build",
+    "build:server": "esbuild server/src/index.ts --bundle --platform=node --format=esm --packages=external --outfile=build/server/index.mjs",
+    "start": "node build/server/index.mjs",
+    "desktop:dev": "npm run build && electron .",
+    "pack:win": "npm run build && node scripts/package-win.mjs",
+    "release:win": "npm run build && node scripts/package-win.mjs --publish",
     "test": "vitest run",
     "preview": "vite preview --host 127.0.0.1"
   },
+  "build": {
+    "appId": "cn.local.promptforge",
+    "productName": "提示词工坊",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/**/*",
+      "dist/**/*",
+      "build/server/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "PromptForge-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "fubaiye",
+        "repo": "prompt-forge-local",
+        "releaseType": "release"
+      }
+    ]
+  },
   "dependencies": {
     "concurrently": "^9.1.2",
+    "electron-updater": "^6.8.9",
     "express": "^4.21.2",
     "lucide-react": "^1.24.0",
     "react": "^18.3.1",
@@ -25,6 +77,9 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.1",
     "jsdom": "^29.1.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",

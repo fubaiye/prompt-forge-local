@@ -8,6 +8,19 @@ export interface GenerateResponse {
 
 export type ProviderPayload = ProviderInput | Partial<ProviderInput>;
 
+export interface UpdateCheckResponse {
+  currentVersion: string;
+  latestVersion?: string;
+  updateAvailable: boolean;
+  releaseUrl?: string;
+  error?: string;
+}
+
+export interface UpdateApplyResponse extends UpdateCheckResponse {
+  status: "latest" | "manual" | "started" | "error";
+  message?: string;
+}
+
 export async function apiJson<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
     ...options,
@@ -66,4 +79,12 @@ export function generatePrompt(payload: GenerateRequest): Promise<GenerateRespon
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function checkUpdate(): Promise<UpdateCheckResponse> {
+  return apiJson<UpdateCheckResponse>("/api/update/check");
+}
+
+export function applyUpdate(): Promise<UpdateApplyResponse> {
+  return apiJson<UpdateApplyResponse>("/api/update/apply", { method: "POST" });
 }

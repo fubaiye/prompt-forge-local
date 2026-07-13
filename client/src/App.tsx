@@ -1,4 +1,4 @@
-import { Eye, ImageIcon, Link2, PencilLine, Settings, Sparkles, Type, Video } from "lucide-react";
+import { Settings, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DOWNSTREAM_MODELS, getDownstreamModels } from "../../shared/modelCatalog";
 import type { GenerateRequest, HistoryItem, MaskedProvider, ProviderInput } from "../../shared/types";
@@ -13,9 +13,9 @@ import {
   type ProviderPayload,
 } from "./api";
 import { ForgePanel } from "./components/ForgePanel";
-import { HistoryPanel } from "./components/HistoryPanel";
 import { ProviderSettings } from "./components/ProviderSettings";
 import { ResultPanel } from "./components/ResultPanel";
+import { UpdateIndicator } from "./components/UpdateIndicator";
 
 const DEFAULT_FORM: GenerateRequest = {
   requirement: "",
@@ -170,6 +170,7 @@ export default function App() {
           <span className={providers.length > 0 ? "status-pill online" : "status-pill"}>
             {providers.length > 0 ? `${providers.length} 个 API Provider` : "未配置 API"}
           </span>
+          <UpdateIndicator />
           <button className="icon-text-button" type="button" onClick={() => setSettingsOpen(true)}>
             <Settings size={16} />
             设置 API
@@ -178,46 +179,12 @@ export default function App() {
       </header>
 
       <section className="hero-stage" aria-label="提示词工坊介绍">
-        <div className="version-pill">
-          <span />
-          SYSTEM PROMPT FORGE · V2.0
-        </div>
         <h1>
-          一句话需求，<br className="mobile-break" />
-          <span>锻造</span>出给 AI 的
-          <br />
-          系统提示词
+          生成专业的 <span>System Prompt</span>
         </h1>
         <p>
-          选择大脑模型、告诉它接不接图片、要不要驱动下游生图/视频，<strong>一句话</strong>就产出一段专业的
-          System Prompt，拷走即用。
+          选择目标模型、视觉能力和下游任务，用你自己的 API 快速生成可编辑、可复用的系统提示词。
         </p>
-        <div className="hero-chips" aria-label="能力标签">
-          <span className="billing-chip">
-            <Link2 size={15} />
-            本地 API · 自行计费
-          </span>
-          <span>
-            <Type size={15} />
-            文本 LLM
-          </span>
-          <span>
-            <Eye size={15} />
-            多模态 VLM
-          </span>
-          <span>
-            <ImageIcon size={15} />
-            文/图生图
-          </span>
-          <span>
-            <PencilLine size={15} />
-            图像编辑
-          </span>
-          <span>
-            <Video size={15} />
-            文/图生视频
-          </span>
-        </div>
       </section>
 
       <section className="workspace">
@@ -237,11 +204,13 @@ export default function App() {
           error={error}
           isGenerating={isGenerating}
           canRegenerate={canGenerate}
+          history={history}
+          onPromptChange={setGeneratedPrompt}
           onRegenerate={handleGenerate}
+          onRestore={restoreHistory}
+          onDeleteHistory={handleDeleteHistory}
         />
       </section>
-
-      <HistoryPanel history={history} onRestore={restoreHistory} onDelete={handleDeleteHistory} />
 
       {settingsOpen && (
         <ProviderSettings

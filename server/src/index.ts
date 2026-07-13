@@ -1,21 +1,18 @@
-import express from "express";
-import { fileURLToPath } from "node:url";
-import { createGenerateRouter } from "./routes/generate";
-import { createHistoryRouter } from "./routes/history";
-import { createProvidersRouter } from "./routes/providers";
-import { createHistoryStore } from "./storage/historyStore";
-import { createProviderStore } from "./storage/providerStore";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { startServer } from "./app";
 
-const app = express();
-const dataDir = fileURLToPath(new URL("../../data", import.meta.url));
-const providers = createProviderStore(dataDir);
-const history = createHistoryStore(dataDir);
+export { createApp, startServer } from "./app";
 
-app.use(express.json({ limit: "1mb" }));
-app.use("/api/providers", createProvidersRouter(providers));
-app.use("/api/history", createHistoryRouter(history));
-app.use("/api/generate", createGenerateRouter(providers, history));
+const entryUrl = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : "";
 
-app.listen(8787, "127.0.0.1", () => {
-  console.log("Prompt Forge API listening on http://127.0.0.1:8787");
-});
+if (import.meta.url === entryUrl) {
+  startServer()
+    .then((server) => {
+      console.log(`Prompt Forge listening on ${server.url}`);
+    })
+    .catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
+}
