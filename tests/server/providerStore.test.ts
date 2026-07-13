@@ -30,7 +30,7 @@ describe("provider store", () => {
 
     expect(raw?.apiKey).toBe("sk-test-1234567890");
     expect(provider.baseUrl).toBe("https://openrouter.ai/api/v1");
-    expect(list[0].apiKey).toBeUndefined();
+    expect("apiKey" in list[0]).toBe(false);
     expect(list[0].apiKeyMasked).toBe("sk-t••••7890");
   });
 
