@@ -13,7 +13,10 @@ export interface UpdateRouterOptions {
   currentVersion?: string;
   repository?: string;
   updateCommand?: string;
+  updateWebhookUrl?: string;
+  updateWebhookToken?: string;
   fetchLatestRelease?: (repository: string) => Promise<GitHubRelease>;
+  fetchUpdateWebhook?: typeof fetch;
 }
 
 export function createUpdateRouter(options: UpdateRouterOptions = RouterDefaultOptions) {
@@ -22,6 +25,9 @@ export function createUpdateRouter(options: UpdateRouterOptions = RouterDefaultO
   const repository = options.repository ?? process.env.PROMPT_FORGE_GITHUB_REPO ?? GITHUB_REPOSITORY;
   const fetchLatestRelease = options.fetchLatestRelease ?? fetchGitHubLatestRelease;
   const updateCommand = options.updateCommand ?? process.env.PROMPT_FORGE_UPDATE_COMMAND;
+  const updateWebhookUrl = options.updateWebhookUrl ?? process.env.PROMPT_FORGE_UPDATE_WEBHOOK_URL;
+  const updateWebhookToken = options.updateWebhookToken ?? process.env.PROMPT_FORGE_UPDATE_WEBHOOK_TOKEN;
+  const fetchUpdateWebhook = options.fetchUpdateWebhook ?? fetch;
 
   router.get("/check", async (_req, res) => {
     try {
@@ -43,6 +49,12 @@ export function createUpdateRouter(options: UpdateRouterOptions = RouterDefaultO
 
       if (!check.updateAvailable) {
         res.json({ status: "latest", ...check });
+        return;
+      }
+
+      if (updateWebhookUrl) {
+        await callUpdateWebhook(fetchUpdateWebhook, updateWebhookUrl, updateWebhookToken, check);
+        res.json({ status: "started", message: "NAS Docker update has been triggered.", ...check });
         return;
       }
 
@@ -77,6 +89,31 @@ export function createUpdateRouter(options: UpdateRouterOptions = RouterDefaultO
 }
 
 const RouterDefaultOptions: UpdateRouterOptions = {};
+
+async function callUpdateWebhook(
+  fetcher: typeof fetch,
+  url: string,
+  token: string | undefined,
+  check: ReturnType<typeof toUpdateCheck>,
+) {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetcher(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      targetVersion: check.latestVersion,
+      releaseUrl: check.releaseUrl ?? "",
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Update webhook failed with ${response.status}`);
+  }
+}
 
 function toUpdateCheck(release: GitHubRelease, currentVersion: string) {
   const latestVersion = stripVersionPrefix(release.tag_name);

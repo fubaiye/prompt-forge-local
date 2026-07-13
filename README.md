@@ -51,8 +51,28 @@ services:
       PROMPT_FORGE_DATA_DIR: /app/data
       PROMPT_FORGE_CLIENT_DIST: /app/dist
       PROMPT_FORGE_GITHUB_REPO: fubaiye/prompt-forge-local
+      PROMPT_FORGE_UPDATE_WEBHOOK_URL: http://prompt-forge-updater:8080/v1/update
+      PROMPT_FORGE_UPDATE_WEBHOOK_TOKEN: prompt-forge-nas-update
     volumes:
       - ./data:/app/data
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+  prompt-forge-updater:
+    image: containrrr/watchtower:latest
+    container_name: prompt-forge-updater
+    restart: unless-stopped
+    command:
+      - --http-api-update
+      - --http-api-token
+      - prompt-forge-nas-update
+      - --label-enable
+      - --cleanup
+      - --rolling-restart
+    environment:
+      WATCHTOWER_NO_STARTUP_MESSAGE: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 ```
 
 5. 点“立即部署”。
@@ -66,9 +86,9 @@ http://你的NAS局域网IP:8787
 
 ### Docker 版更新
 
-右上角会检查 GitHub Release 并提示有新版本。Docker 部署建议在 Container Manager 里重建项目，或者在 Compose 页面重新部署，让 NAS 重新拉取 `ghcr.io/fubaiye/prompt-forge-local:latest`。
+右上角会检查 GitHub Release 并提示有新版本。使用上面的 NAS Compose 时，点击更新会调用 `prompt-forge-updater`，由 Watchtower 拉取 `ghcr.io/fubaiye/prompt-forge-local:latest` 并重启 `prompt-forge` 容器。
 
-如果你愿意用 SSH，也可以执行：
+如果 Watchtower 服务被你删掉，仍然可以在 Container Manager 里重建项目，或者用 SSH 执行：
 
 ```bash
 cd /volume1/docker/prompt-forge

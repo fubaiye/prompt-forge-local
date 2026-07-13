@@ -58,6 +58,48 @@ describe("update route", () => {
       releaseUrl: "https://github.com/fubaiye/prompt-forge-local/releases/tag/v0.2.0",
     });
   });
+
+  it("starts an update through a configured webhook", async () => {
+    const webhookFetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true }),
+    }));
+
+    const app = express();
+    app.use(express.json());
+    app.use(
+      "/api/update",
+      createUpdateRouter({
+        currentVersion: "0.1.0",
+        repository: "fubaiye/prompt-forge-local",
+        updateWebhookUrl: "http://watchtower:8080/v1/update",
+        updateWebhookToken: "nas-token",
+        fetchLatestRelease: async () => ({
+          tag_name: "v0.2.0",
+          html_url: "https://github.com/fubaiye/prompt-forge-local/releases/tag/v0.2.0",
+        }),
+        fetchUpdateWebhook: webhookFetch as any,
+      }),
+    );
+
+    const response = await requestJson(app, "/api/update/apply", "POST");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      status: "started",
+      latestVersion: "0.2.0",
+      releaseUrl: "https://github.com/fubaiye/prompt-forge-local/releases/tag/v0.2.0",
+    });
+    expect(webhookFetch).toHaveBeenCalledWith(
+      "http://watchtower:8080/v1/update",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer nas-token",
+        }),
+      }),
+    );
+  });
 });
 
 async function requestJson(app: Express, path: string, method: "GET" | "POST"): Promise<{ status: number; body: any }> {

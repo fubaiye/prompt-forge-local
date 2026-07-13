@@ -11,5 +11,25 @@ services:
       PROMPT_FORGE_DATA_DIR: /app/data
       PROMPT_FORGE_CLIENT_DIST: /app/dist
       PROMPT_FORGE_GITHUB_REPO: fubaiye/prompt-forge-local
+      PROMPT_FORGE_UPDATE_WEBHOOK_URL: http://prompt-forge-updater:8080/v1/update
+      PROMPT_FORGE_UPDATE_WEBHOOK_TOKEN: prompt-forge-nas-update
     volumes:
       - ./data:/app/data
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+  prompt-forge-updater:
+    image: containrrr/watchtower:latest
+    container_name: prompt-forge-updater
+    restart: unless-stopped
+    command:
+      - --http-api-update
+      - --http-api-token
+      - prompt-forge-nas-update
+      - --label-enable
+      - --cleanup
+      - --rolling-restart
+    environment:
+      WATCHTOWER_NO_STARTUP_MESSAGE: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
