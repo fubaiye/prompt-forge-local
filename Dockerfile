@@ -24,8 +24,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
 COPY --from=build /app/dist ./dist
 
-RUN mkdir -p /app/data && chown -R node:node /app/data
-USER node
+RUN mkdir -p /app/data
 
 EXPOSE 8787
 CMD ["node", "build/server/index.mjs"]

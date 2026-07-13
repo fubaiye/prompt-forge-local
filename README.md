@@ -42,6 +42,7 @@ services:
   prompt-forge:
     image: ghcr.io/fubaiye/prompt-forge-local:latest
     container_name: prompt-forge
+    user: "0:0"
     restart: unless-stopped
     ports:
       - "8787:8787"
@@ -83,6 +84,8 @@ http://你的NAS局域网IP:8787
 ```
 
 数据会保存在 NAS 的 `prompt-forge/data` 目录里，包括 API Provider 和历史记录。该目录不会提交到 GitHub。
+
+`user: "0:0"` 是为了兼容群晖/绿联等 NAS 对共享文件夹挂载目录的权限处理，避免保存 API Provider 时出现 `/app/data/providers.json.tmp` permission denied。
 
 ### Docker 版更新
 
