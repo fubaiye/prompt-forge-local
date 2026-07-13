@@ -28,7 +28,16 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Build Windows installer and publish release
-        run: npm run release:win
+      - name: Build Windows installer
+        run: npm run pack:win
+
+      - name: Publish GitHub release
+        shell: pwsh
+        run: |
+          gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --title $env:GITHUB_REF_NAME --generate-notes --latest
+          }
+          gh release upload $env:GITHUB_REF_NAME release/PromptForge-Setup-*.exe release/PromptForge-Setup-*.exe.blockmap release/latest.yml --repo $env:GITHUB_REPOSITORY --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
