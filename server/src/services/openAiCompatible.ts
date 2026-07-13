@@ -10,7 +10,7 @@ export async function callChatCompletion(
   request: GenerateRequest,
   messages: ChatMessage[],
 ): Promise<ChatCompletionResult> {
-  const response = await fetch(`${provider.baseUrl}/chat/completions`, {
+  const response = await fetch(chatCompletionsUrl(provider.baseUrl), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -35,6 +35,11 @@ export async function callChatCompletion(
   }
 
   return { text: text.trim(), usage: data.usage ?? null };
+}
+
+function chatCompletionsUrl(baseUrl: string): string {
+  const cleaned = baseUrl.replace(/\/+$/, "");
+  return /\/chat\/completions$/i.test(cleaned) ? cleaned : `${cleaned}/chat/completions`;
 }
 
 function temperaturePayload(model: string): { temperature?: number } {
