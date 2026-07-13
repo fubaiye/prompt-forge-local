@@ -1,7 +1,7 @@
-import { Settings, Sparkles } from "lucide-react";
+import { Eye, ImageIcon, Link2, PencilLine, Settings, Sparkles, Type, Video } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DOWNSTREAM_MODELS, getDownstreamModels } from "../../shared/modelCatalog";
-import type { GenerateRequest, HistoryItem, MaskedProvider, ProviderInput, TaskCategory } from "../../shared/types";
+import type { GenerateRequest, HistoryItem, MaskedProvider, ProviderInput } from "../../shared/types";
 import {
   createProvider,
   deleteHistoryItem,
@@ -176,6 +176,49 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      <section className="hero-stage" aria-label="提示词工坊介绍">
+        <div className="version-pill">
+          <span />
+          SYSTEM PROMPT FORGE · V2.0
+        </div>
+        <h1>
+          一句话需求，<br className="mobile-break" />
+          <span>锻造</span>出给 AI 的
+          <br />
+          系统提示词
+        </h1>
+        <p>
+          选择大脑模型、告诉它接不接图片、要不要驱动下游生图/视频，<strong>一句话</strong>就产出一段专业的
+          System Prompt，拷走即用。
+        </p>
+        <div className="hero-chips" aria-label="能力标签">
+          <span className="billing-chip">
+            <Link2 size={15} />
+            本地 API · 自行计费
+          </span>
+          <span>
+            <Type size={15} />
+            文本 LLM
+          </span>
+          <span>
+            <Eye size={15} />
+            多模态 VLM
+          </span>
+          <span>
+            <ImageIcon size={15} />
+            文/图生图
+          </span>
+          <span>
+            <PencilLine size={15} />
+            图像编辑
+          </span>
+          <span>
+            <Video size={15} />
+            文/图生视频
+          </span>
+        </div>
+      </section>
 
       <section className="workspace">
         <ForgePanel

@@ -1,4 +1,4 @@
-import { Trash2 } from "lucide-react";
+import { Clock3, Save, Trash2 } from "lucide-react";
 import type { HistoryItem } from "../../../shared/types";
 
 interface HistoryPanelProps {
@@ -9,13 +9,21 @@ interface HistoryPanelProps {
 
 export function HistoryPanel({ history, onRestore, onDelete }: HistoryPanelProps) {
   return (
-    <section className="history-band" aria-label="历史记录">
+    <section className="history-band" aria-label="锻造记录">
       <div className="history-heading">
-        <span className="eyebrow">HISTORY</span>
-        <h2>最近锻造</h2>
+        <div>
+          <h2>
+            <Clock3 size={22} />
+            锻造记录
+          </h2>
+          <p>已保存的提示词，点一条即可回填复用。</p>
+        </div>
       </div>
       {history.length === 0 ? (
-        <p className="history-empty">暂无历史。生成成功后会自动保存到本机。</p>
+        <div className="history-empty-box">
+          <Save size={28} />
+          <p>还没有锻造记录，生成一条点「存到历史」。</p>
+        </div>
       ) : (
         <div className="history-list">
           {history.slice(0, 8).map((item) => (
