@@ -407,6 +407,114 @@ textarea:hover {
   color: var(--text-secondary);
 }
 
+.image-upload-zone {
+  display: grid;
+  gap: 6px;
+  place-items: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  padding: 14px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  text-align: center;
+}
+
+.image-upload-zone:hover {
+  border-color: rgba(168, 85, 247, 0.44);
+  background: var(--bg-hover);
+}
+
+.image-upload-zone input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.image-upload-zone svg {
+  color: var(--accent);
+}
+
+.image-upload-zone span {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.image-upload-zone small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.image-upload-error {
+  margin: 8px 0 0;
+  color: #fecaca;
+  font-size: 12px;
+}
+
+.image-attachment-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.image-attachment {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 8px;
+  background: var(--bg-elevated);
+}
+
+.image-attachment img {
+  width: 48px;
+  height: 48px;
+  border-radius: 9px;
+  object-fit: cover;
+  background: var(--bg-page);
+}
+
+.image-attachment strong,
+.image-attachment span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-attachment strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.image-attachment span {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.image-attachment button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.image-attachment button:hover {
+  border-color: rgba(248, 113, 113, 0.36);
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.08);
+}
+
 .full-width {
   width: 100%;
   margin-top: 12px;

@@ -94,6 +94,9 @@ export default function App() {
           next.downstreamModel = first?.value;
         }
       }
+      if (patch.visionEnabled === false) {
+        next.imageAttachments = undefined;
+      }
       return next;
     });
   }
@@ -140,17 +143,19 @@ export default function App() {
   }
 
   function restoreHistory(item: HistoryItem) {
+    const hasImageSummaries = Boolean(item.imageAttachments?.length);
     setForm({
       requirement: item.requirement,
       providerId: item.providerId,
       generationModel: item.generationModel,
       targetModel: item.targetModel,
-      visionEnabled: item.visionEnabled,
+      visionEnabled: hasImageSummaries ? false : item.visionEnabled,
       taskCategory: item.taskCategory,
       downstreamModel: item.downstreamModel,
+      imageAttachments: undefined,
     });
     setGeneratedPrompt(item.systemPrompt);
-    setError("");
+    setError(hasImageSummaries ? "这条历史记录使用过图片。历史只保留图片摘要，重新生成前请重新上传对应图片。" : "");
   }
 
   return (

@@ -1,5 +1,5 @@
 import { getDownstreamModel, getTargetModel, TASK_CATEGORIES } from "../../../shared/modelCatalog";
-import type { ChatMessage, DownstreamModel, GenerateRequest, TaskCategory } from "../../../shared/types";
+import type { ChatContentPart, ChatMessage, DownstreamModel, GenerateRequest, TaskCategory } from "../../../shared/types";
 
 export function buildPromptMessages(request: GenerateRequest): ChatMessage[] {
   const target = getTargetModel(request.targetModel);
@@ -9,40 +9,82 @@ export function buildPromptMessages(request: GenerateRequest): ChatMessage[] {
   if (request.taskCategory !== "none" && !downstream) throw new Error("Downstream model is required");
 
   const task = TASK_CATEGORIES.find((item) => item.key === request.taskCategory);
-  const visionGuidance = buildVisionGuidance(request.visionEnabled, target.vision);
+  const userText = [
+    "请为我写一份 System Prompt。",
+    `用户需求: ${request.requirement.trim()}`,
+    buildFinalIntentGuidance(request.taskCategory),
+    buildImageAttachmentGuidance(request),
+    `目标模型: ${target.label} (${target.vendor}, ${target.family === "open" ? "开源模型" : "闭源模型"})`,
+    `能力边界: ${target.vision ? "目录标记为支持视觉输入" : "目录标记为纯文本模型"}；${
+      target.reasoning ? "适合复杂推理任务" : "不强制长 chain-of-thought"
+    }${target.tag ? `；标签: ${target.tag}` : ""}`,
+    buildVisionGuidance(request.visionEnabled, target.vision),
+    `下游任务类型: ${task?.name ?? request.taskCategory}`,
+    buildDownstreamGuidance(request.taskCategory, downstream),
+    [
+      "写作要求:",
+      "1. 只输出 System Prompt 正文，使用 Markdown 组织规则、流程和输出格式。",
+      "2. 提示词必须贴合目标模型能力边界；对生图任务，只描述可用输入、流程和输出字段，不要写成限制性免责声明。",
+      "3. 用户用中文写需求就用中文写提示词，英文需求用英文；默认中文。",
+      "4. 用户需求模糊时不要反问，直接采用合理默认假设，产出专业可用版本。",
+      "5. 建议长度 300-1000 字，紧凑可执行，避免空泛口号。",
+      "6. 需要包含角色定位、任务目标、输入处理、工作流程、输出格式、质量标准和失败处理。",
+    ].join("\n"),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   return [
     {
       role: "system",
       content:
-        "你是一位顶尖的 AI Prompt Engineer，擅长为任意 LLM、VLM、图像与视频工作流撰写可直接复制使用的高质量 System Prompt。只输出 System Prompt 正文，不要前言、寒暄、解释或总结。",
+        "你是一位顶尖的 AI Prompt Engineer，擅长为 LLM、VLM、图像与视频工作流撰写可直接复制使用的高质量 System Prompt。只输出 System Prompt 正文，不要前言、寒暄、解释或总结。",
     },
     {
       role: "user",
-      content: [
-        "请为我写一份 System Prompt。",
-        `用户需求: ${request.requirement.trim()}`,
-        `目标模型: ${target.label} (${target.vendor}, ${target.family === "open" ? "开源模型" : "闭源模型"})`,
-        `能力边界: ${target.vision ? "目录标记为支持视觉输入" : "目录标记为纯文本模型"}；${
-          target.reasoning ? "适合复杂推理任务" : "不强制长 chain-of-thought"
-        }${target.tag ? `；标签: ${target.tag}` : ""}`,
-        visionGuidance,
-        `下游任务类型: ${task?.name ?? request.taskCategory}`,
-        buildDownstreamGuidance(request.taskCategory, downstream),
-        [
-          "写作要求:",
-          "1. 只输出 System Prompt 正文，使用 Markdown 组织规则、流程和输出格式。",
-          "2. 提示词必须贴合目标模型能力边界，不要要求模型执行它不支持的输入或工具能力。",
-          "3. 用户用中文写需求就用中文写提示词，英文需求用英文；默认中文。",
-          "4. 用户需求模糊时不要反问，直接采用合理默认假设，产出专业可用版本。",
-          "5. 建议长度 300-1000 字，紧凑可执行，避免空泛口号。",
-          "6. 需要包含角色定位、任务目标、输入处理、工作流程、输出格式、质量标准和失败处理。",
-        ].join("\n"),
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
+      content: buildUserContent(userText, request),
     },
   ];
+}
+
+function buildUserContent(text: string, request: GenerateRequest): string | ChatContentPart[] {
+  if (!request.imageAttachments?.length) return text;
+  return [
+    { type: "text", text },
+    ...request.imageAttachments.map<ChatContentPart>((image) => ({
+      type: "image_url",
+      image_url: {
+        url: image.dataUrl,
+        detail: "auto",
+      },
+    })),
+  ];
+}
+
+function buildImageAttachmentGuidance(request: GenerateRequest): string {
+  if (!request.imageAttachments?.length) return "";
+  const imageList = request.imageAttachments
+    .map((image, index) => `图${index + 1}: ${image.name} (${image.mimeType}, ${Math.round(image.size / 1024)}KB)`)
+    .join("\n");
+
+  return [
+    "已上传图像:",
+    imageList,
+    "请先观察这些图片。用户会用图1、图2等编号引用它们；需要区分风格参考图、主体图、目标编辑图和普通上下文图。",
+    "生成 System Prompt 时，要让目标模型明确先读图，再结合用户文字，把自然语言需求优化成适合下游生图或改图模型理解的提示词。",
+  ].join("\n");
+}
+
+function buildFinalIntentGuidance(category: TaskCategory): string {
+  if (!["text2img", "img2img", "edit"].includes(category)) return "";
+
+  return [
+    "最终目标是生成图像。",
+    "本次输出要服务于文生图、图生图或图像编辑模型，帮助用户得到更贴合想法的图片结果。",
+    "生成的 System Prompt 必须驱动目标大脑模型产出可直接复制到下游生图模型的 prompt 或编辑指令。",
+    "最终输出不得包含否定生图能力、拒绝生成图片、强调无法出图、声明不负责生成、或把自己降格为纯文本指令搬运的措辞。",
+    "如果需要表达边界，请改写为：输出可直接交给下游模型执行的图像生成 prompt。",
+  ].join("\n");
 }
 
 function buildVisionGuidance(visionEnabled: boolean, targetSupportsVision: boolean): string {
@@ -80,12 +122,14 @@ function buildDownstreamGuidance(category: TaskCategory, downstream?: Downstream
       "写作要点: 目标大脑模型需要先分析参考图，再输出可执行的图生图 prompt。",
       "字段必须包含: reference_analysis, preserve, modify, style, strength_hint, prompt, negative_prompt。",
       "必须明确哪些元素保持不变，哪些元素允许重绘或风格化。",
+      "当用户上传多张图时，必须按图1、图2等编号说明每张图的角色，例如风格参考图、主体图、目标编辑图。",
     ].join("\n"),
     edit: [
       header,
       "写作要点: 目标大脑模型需要把自然语言编辑指令拆成可执行操作序列。",
       "输出必须包含 JSON 数组 operations，以及最终给下游模型的自然语言编辑指令。",
       "每个操作包含 target, action, constraints, mask_hint, priority, failure_risk。",
+      "当涉及文字、Logo、UI 或海报时，必须强调可读性、边缘清晰、无乱码、无错别字和不破坏原始信息。",
     ].join("\n"),
     text2video: [
       header,

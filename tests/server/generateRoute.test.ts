@@ -68,6 +68,67 @@ describe("generate route", () => {
     expect((await history.list()).length).toBe(1);
   });
 
+  it("sends uploaded images as multimodal content and stores only summaries", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "prompt-forge-"));
+    const providers = createProviderStore(tempDir);
+    const history = createHistoryStore(tempDir);
+    const provider = await providers.create({
+      name: "Vision Test",
+      baseUrl: "https://example.test/v1",
+      apiKey: "sk-test-1234567890",
+      models: ["qwen3-vl-plus"],
+      defaultModel: "qwen3-vl-plus",
+    });
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "VISION SYSTEM PROMPT" } }],
+        usage: { total_tokens: 64 },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = express();
+    app.use(express.json({ limit: "50mb" }));
+    app.use("/api/generate", createGenerateRouter(providers, history));
+
+    const response = await requestJson(app, "/api/generate", {
+      requirement: "Use image 1 style and transform image 2 for Nano Banana.",
+      providerId: provider.id,
+      generationModel: "qwen3-vl-plus",
+      targetModel: "qwen3-vl-72b",
+      visionEnabled: true,
+      taskCategory: "img2img",
+      downstreamModel: "nano-banana-pro-i2i",
+      imageAttachments: [
+        {
+          id: "image-1",
+          name: "reference.png",
+          mimeType: "image/png",
+          size: 68,
+          dataUrl: SAMPLE_PNG_DATA_URL,
+        },
+      ],
+    });
+
+    expect(response.status).toBe(200);
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as any)[1]?.body));
+    const userContent = body.messages[1].content;
+    expect(Array.isArray(userContent)).toBe(true);
+    expect(userContent).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text", text: expect.stringContaining("图1") }),
+        expect.objectContaining({ type: "image_url", image_url: { url: SAMPLE_PNG_DATA_URL, detail: "auto" } }),
+      ]),
+    );
+
+    const items = await history.list();
+    expect((items[0] as any).imageAttachments).toEqual([
+      { id: "image-1", name: "reference.png", mimeType: "image/png", size: 68 },
+    ]);
+  });
+
   it("rejects short requirements before calling providers", async () => {
     tempDir = await mkdtemp(join(tmpdir(), "prompt-forge-"));
     const providers = createProviderStore(tempDir);
@@ -99,7 +160,92 @@ describe("generate route", () => {
     expect(response.body.error).toContain("at least 4");
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("rejects unsupported image attachments before calling providers", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "prompt-forge-"));
+    const providers = createProviderStore(tempDir);
+    const history = createHistoryStore(tempDir);
+    const provider = await providers.create({
+      name: "Test",
+      baseUrl: "https://example.test/v1",
+      apiKey: "sk-test-1234567890",
+      models: ["qwen3-vl-plus"],
+      defaultModel: "qwen3-vl-plus",
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = express();
+    app.use(express.json({ limit: "50mb" }));
+    app.use("/api/generate", createGenerateRouter(providers, history));
+
+    const response = await requestJson(app, "/api/generate", {
+      requirement: "Use the uploaded reference image to improve this prompt.",
+      providerId: provider.id,
+      generationModel: "qwen3-vl-plus",
+      targetModel: "qwen3-vl-72b",
+      visionEnabled: true,
+      taskCategory: "none",
+      imageAttachments: [
+        {
+          id: "bad",
+          name: "notes.txt",
+          mimeType: "text/plain",
+          size: 12,
+          dataUrl: "data:text/plain;base64,aGVsbG8=",
+        },
+      ],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("Unsupported image type");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects spoofed image data before calling providers", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "prompt-forge-"));
+    const providers = createProviderStore(tempDir);
+    const history = createHistoryStore(tempDir);
+    const provider = await providers.create({
+      name: "Test",
+      baseUrl: "https://example.test/v1",
+      apiKey: "sk-test-1234567890",
+      models: ["qwen3-vl-plus"],
+      defaultModel: "qwen3-vl-plus",
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = express();
+    app.use(express.json({ limit: "50mb" }));
+    app.use("/api/generate", createGenerateRouter(providers, history));
+
+    const response = await requestJson(app, "/api/generate", {
+      requirement: "Use the uploaded reference image to improve this prompt.",
+      providerId: provider.id,
+      generationModel: "qwen3-vl-plus",
+      targetModel: "qwen3-vl-72b",
+      visionEnabled: true,
+      taskCategory: "none",
+      imageAttachments: [
+        {
+          id: "spoof",
+          name: "fake.png",
+          mimeType: "image/png",
+          size: 5,
+          dataUrl: "data:image/png;base64,aGVsbG8=",
+        },
+      ],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("does not match image type");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
+
+const SAMPLE_PNG_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 
 async function requestJson(app: Express, path: string, body: unknown): Promise<{ status: number; body: any }> {
   const server = createServer(app);

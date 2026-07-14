@@ -134,9 +134,7 @@ export function ResultPanel({
                 <article key={item.id} className="history-row">
                   <button type="button" onClick={() => onRestore(item)}>
                     <strong>{item.requirement}</strong>
-                    <span>
-                      {item.targetModel} · {item.taskCategory} · {new Date(item.createdAt).toLocaleString()}
-                    </span>
+                    <span>{historyMeta(item)}</span>
                   </button>
                   <Button type="button" variant="icon" onClick={() => onDeleteHistory(item.id)} title="删除历史">
                     <Trash2 size={16} />
@@ -149,4 +147,12 @@ export function ResultPanel({
       )}
     </Card>
   );
+}
+
+function historyMeta(item: HistoryItem): string {
+  const parts = [item.targetModel, item.taskCategory, new Date(item.createdAt).toLocaleString()];
+  if (item.imageAttachments?.length) {
+    parts.push(`图片摘要 ${item.imageAttachments.length} 张，需重新上传`);
+  }
+  return parts.join(" · ");
 }

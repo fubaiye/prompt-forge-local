@@ -54,15 +54,45 @@ export interface GenerateRequest {
   visionEnabled: boolean;
   taskCategory: TaskCategory;
   downstreamModel?: string;
+  imageAttachments?: ImageAttachment[];
 }
 
-export interface HistoryItem extends GenerateRequest {
+export interface ImageAttachment {
+  id: string;
+  name: string;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  size: number;
+  dataUrl: string;
+}
+
+export interface ImageAttachmentSummary {
+  id: string;
+  name: string;
+  mimeType: ImageAttachment["mimeType"];
+  size: number;
+}
+
+export interface HistoryItem extends Omit<GenerateRequest, "imageAttachments"> {
+  imageAttachments?: ImageAttachmentSummary[];
   id: string;
   systemPrompt: string;
   createdAt: string;
 }
 
+export type ChatContentPart =
+  | {
+      type: "text";
+      text: string;
+    }
+  | {
+      type: "image_url";
+      image_url: {
+        url: string;
+        detail?: "auto" | "low" | "high";
+      };
+    };
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: string | ChatContentPart[];
 }

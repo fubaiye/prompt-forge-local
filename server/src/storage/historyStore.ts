@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import type { GenerateRequest, HistoryItem } from "../../../shared/types";
+import type { GenerateRequest, HistoryItem, ImageAttachmentSummary } from "../../../shared/types";
 import { createJsonFileStore } from "./jsonFileStore";
 
-export interface HistoryInput extends GenerateRequest {
+export interface HistoryInput extends Omit<GenerateRequest, "imageAttachments"> {
+  imageAttachments?: ImageAttachmentSummary[];
   systemPrompt: string;
 }
 

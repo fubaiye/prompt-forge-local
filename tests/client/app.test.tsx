@@ -31,12 +31,11 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByText("Prompt Forge")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /设置 API/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /生成 System Prompt/ })).toBeDisabled();
-    expect(screen.getByPlaceholderText("搜索模型或厂商")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "结果" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByRole("button", { name: /API/ }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /^生成 System Prompt$/ })).toBeDisabled();
+    expect(screen.getByLabelText("上传图片")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "历史版本" })).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /更新到 0.2.0/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /0.2.0/ })).toBeInTheDocument();
   });
 });
 

@@ -33,10 +33,10 @@ export function createApp(options: CreateAppOptions = {}): Express {
   const providers = createProviderStore(dataDir);
   const history = createHistoryStore(dataDir);
 
+  app.use("/api/generate", express.json({ limit: "36mb" }), createGenerateRouter(providers, history));
   app.use(express.json({ limit: "1mb" }));
   app.use("/api/providers", createProvidersRouter(providers));
   app.use("/api/history", createHistoryRouter(history));
-  app.use("/api/generate", createGenerateRouter(providers, history));
   app.use("/api/update", createUpdateRouter(options.update));
 
   const clientDist = options.clientDist ?? process.env.PROMPT_FORGE_CLIENT_DIST ?? path.resolve(process.cwd(), "dist");
