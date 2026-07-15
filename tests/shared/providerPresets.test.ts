@@ -30,4 +30,12 @@ describe("provider presets", () => {
     expect(preset?.baseUrl).toBe("https://openrouter.ai/api/v1");
     expect(preset?.models).toContain("google/gemini-2.5-pro");
   });
+
+  it("uses the Google AI Studio OpenAI-compatible endpoint with current Gemini models", () => {
+    const preset = PROVIDER_PRESETS.find((item) => item.id === "google-ai-studio");
+
+    expect(preset?.baseUrl).toBe("https://generativelanguage.googleapis.com/v1beta/openai");
+    expect(preset?.models).toEqual(expect.arrayContaining(["gemini-3.5-flash", "gemini-3.1-pro"]));
+    expect(preset?.models).not.toContain("gemini-2.0-flash");
+  });
 });

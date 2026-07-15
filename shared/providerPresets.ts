@@ -14,10 +14,10 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     id: "google-ai-studio",
     name: "Google AI Studio",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
-    defaultModel: "gemini-2.5-pro",
+    models: ["gemini-3.5-flash", "gemini-3.1-pro", "gemini-2.5-pro", "gemini-2.5-flash"],
+    defaultModel: "gemini-3.5-flash",
     badge: "Gemini",
-    description: "Google 官方 OpenAI-Compatible 通道。NAS 需要能访问 Google API 域名。",
+    description: "Google 官方 OpenAI-Compatible 通道，含当前 Gemini 3 系列模型。NAS 需要能访问 Google API 域名。",
     keyHint: "使用 AI Studio 生成的 API key。",
   },
   {

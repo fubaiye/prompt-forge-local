@@ -44,6 +44,28 @@ describe("openAI compatible provider calls", () => {
     );
   });
 
+  it("repairs saved Google AI Studio URLs that are missing the OpenAI-compatible path segment", async () => {
+    const fetchMock = mockSuccessfulFetch();
+
+    await callChatCompletion(
+      {
+        ...providerBase,
+        name: "Gemini",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta/chat/completions",
+      },
+      {
+        ...request,
+        generationModel: "gemini-3.5-flash",
+      },
+      [{ role: "user", content: "ping" }],
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      expect.any(Object),
+    );
+  });
+
   it("explains provider connection failures instead of returning raw fetch failed", async () => {
     vi.stubGlobal(
       "fetch",

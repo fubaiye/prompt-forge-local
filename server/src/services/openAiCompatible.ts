@@ -47,7 +47,28 @@ export async function callChatCompletion(
 
 function chatCompletionsUrl(baseUrl: string): string {
   const cleaned = baseUrl.replace(/\/+$/, "");
-  return /\/chat\/completions$/i.test(cleaned) ? cleaned : `${cleaned}/chat/completions`;
+  const geminiBaseUrl = googleAiStudioOpenAiBaseUrl(cleaned);
+  const endpointBaseUrl = geminiBaseUrl ?? cleaned;
+  return /\/chat\/completions$/i.test(endpointBaseUrl) ? endpointBaseUrl : `${endpointBaseUrl}/chat/completions`;
+}
+
+function googleAiStudioOpenAiBaseUrl(baseUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    return null;
+  }
+
+  if (url.hostname !== "generativelanguage.googleapis.com") return null;
+
+  const versionMatch = url.pathname.match(/^\/(v\d+(?:beta)?)(?:\/openai)?(?:\/chat\/completions)?$/i);
+  if (!versionMatch) return null;
+
+  url.pathname = `/${versionMatch[1]}/openai`;
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/+$/, "");
 }
 
 function temperaturePayload(model: string): { temperature?: number } {
