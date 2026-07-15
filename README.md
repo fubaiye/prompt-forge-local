@@ -20,6 +20,12 @@ npm run start
 
 `npm run start` 会从 `dist/` 提供前端页面，同时提供 `/api/*` 接口。
 
+## API 通道
+
+在“设置 API”里可以直接选择通道预设，再填对应平台的 API Key。当前预设包括 Google AI Studio、OpenRouter、阿里云百炼 DashScope、DeepSeek、SiliconFlow、火山方舟、智谱、Moonshot/Kimi 和 MiniMax。
+
+注意：不同通道的 API Key 不能混用。例如 AI Studio 的 Key 只能用于 Google AI Studio 通道；如果 NAS 无法访问 Google API 域名，可以改用 OpenRouter、SiliconFlow 或阿里云百炼等通道，并使用对应平台自己的 Key。
+
 ## Windows 安装包
 
 ```bash

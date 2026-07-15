@@ -1,5 +1,6 @@
 import { KeyRound, Pencil, Trash2, X } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
+import { PROVIDER_PRESETS, type ProviderPreset } from "../../../shared/providerPresets";
 import type { MaskedProvider, ProviderInput } from "../../../shared/types";
 import type { ProviderPayload } from "../api";
 
@@ -41,6 +42,18 @@ export function ProviderSettings({ providers, onClose, onSave, onDelete }: Provi
   function resetForm() {
     setEditingId(undefined);
     setForm(EMPTY_FORM);
+    setError("");
+  }
+
+  function applyPreset(preset: ProviderPreset) {
+    setEditingId(undefined);
+    setForm({
+      name: preset.name,
+      baseUrl: preset.baseUrl,
+      apiKey: form.apiKey,
+      models: preset.models.join("\n"),
+      defaultModel: preset.defaultModel,
+    });
     setError("");
   }
 
@@ -110,6 +123,29 @@ export function ProviderSettings({ providers, onClose, onSave, onDelete }: Provi
 
           <form className="provider-form" onSubmit={handleSubmit}>
             <h3>{editingProvider ? `编辑 ${editingProvider.name}` : "添加 Provider"}</h3>
+            <div className="preset-panel">
+              <div className="preset-heading">
+                <span>API 通道预设</span>
+                <small>选择通道后只需要粘贴该平台自己的 API Key。</small>
+              </div>
+              <div className="preset-grid">
+                {PROVIDER_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={form.baseUrl === preset.baseUrl ? "preset-card selected" : "preset-card"}
+                    onClick={() => applyPreset(preset)}
+                  >
+                    <span className="preset-card-title">
+                      <strong>{preset.name}</strong>
+                      <em>{preset.badge}</em>
+                    </span>
+                    <span>{preset.description}</span>
+                    <small>{preset.keyHint}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
             <label className="field-block">
               <span>名称</span>
               <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="OpenRouter" />
@@ -136,8 +172,8 @@ export function ProviderSettings({ providers, onClose, onSave, onDelete }: Provi
               <textarea
                 value={form.models}
                 onChange={(event) => setForm({ ...form, models: event.target.value })}
-                placeholder={"gpt-4o\ndeepseek-chat\nqwen-plus"}
-                rows={5}
+                placeholder={"google/gemini-2.5-pro\nqwen3-vl-plus\ndeepseek-v4-pro"}
+                rows={6}
               />
             </label>
             <label className="field-block">

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { MaskedProvider, ProviderInput, ProviderRecord } from "../../../shared/types";
-import { isNonEmptyString, maskApiKey, normalizeBaseUrl } from "../../../shared/validation";
+import { assertHttpHeaderSafe, isNonEmptyString, maskApiKey, normalizeBaseUrl } from "../../../shared/validation";
 import { createJsonFileStore } from "./jsonFileStore";
 
 export interface ProviderUpdateInput {
@@ -50,7 +50,7 @@ export function createProviderStore(dataDir: string): ProviderStore {
         ...current,
         name: cleanOptionalString(input.name, current.name),
         baseUrl: input.baseUrl === undefined ? current.baseUrl : normalizeBaseUrl(requiredString(input.baseUrl, "baseUrl")),
-        apiKey: input.apiKey && input.apiKey.trim().length > 0 ? input.apiKey.trim() : current.apiKey,
+        apiKey: input.apiKey && input.apiKey.trim().length > 0 ? cleanApiKey(input.apiKey) : current.apiKey,
         models: input.models === undefined ? current.models : cleanModels(input.models),
         defaultModel: cleanDefaultModel(input.defaultModel, input.models ?? current.models, current.defaultModel),
         updatedAt: new Date().toISOString(),
@@ -87,10 +87,14 @@ function cleanCreateInput(input: ProviderInput): ProviderInput {
   return {
     name: requiredString(input.name, "name"),
     baseUrl: normalizeBaseUrl(requiredString(input.baseUrl, "baseUrl")),
-    apiKey: requiredString(input.apiKey, "apiKey"),
+    apiKey: cleanApiKey(input.apiKey),
     models,
     defaultModel: cleanDefaultModel(input.defaultModel, models),
   };
+}
+
+function cleanApiKey(value: unknown): string {
+  return assertHttpHeaderSafe(requiredString(value, "apiKey"), "API Key");
 }
 
 function cleanModels(models: string[]): string[] {

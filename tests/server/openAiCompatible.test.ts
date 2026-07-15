@@ -43,6 +43,44 @@ describe("openAI compatible provider calls", () => {
       expect.any(Object),
     );
   });
+
+  it("explains provider connection failures instead of returning raw fetch failed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }),
+    );
+
+    await expect(
+      callChatCompletion(
+        {
+          ...providerBase,
+          baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+        },
+        request,
+        [{ role: "user", content: "ping" }],
+      ),
+    ).rejects.toThrow("无法连接 API Provider \"DashScope\"");
+  });
+
+  it("rejects API keys with full-width or Chinese characters before building headers", async () => {
+    const fetchMock = mockSuccessfulFetch();
+
+    await expect(
+      callChatCompletion(
+        {
+          ...providerBase,
+          apiKey: "API Key：sk-test",
+          baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        },
+        request,
+        [{ role: "user", content: "ping" }],
+      ),
+    ).rejects.toThrow("API Key 包含中文或全角字符");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 function mockSuccessfulFetch() {

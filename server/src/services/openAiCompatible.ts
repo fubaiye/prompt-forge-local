@@ -1,4 +1,5 @@
 import type { ChatMessage, GenerateRequest, ProviderRecord } from "../../../shared/types";
+import { assertHttpHeaderSafe } from "../../../shared/validation";
 
 export interface ChatCompletionResult {
   text: string;
@@ -10,19 +11,26 @@ export async function callChatCompletion(
   request: GenerateRequest,
   messages: ChatMessage[],
 ): Promise<ChatCompletionResult> {
-  const response = await fetch(chatCompletionsUrl(provider.baseUrl), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${provider.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: request.generationModel,
-      messages,
-      max_tokens: 4096,
-      ...temperaturePayload(request.generationModel),
-    }),
-  });
+  const endpoint = chatCompletionsUrl(provider.baseUrl);
+  const apiKey = assertHttpHeaderSafe(provider.apiKey, "API Key");
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: request.generationModel,
+        messages,
+        max_tokens: 4096,
+        ...temperaturePayload(request.generationModel),
+      }),
+    });
+  } catch (error) {
+    throw new Error(providerConnectionError(provider, endpoint, error));
+  }
 
   const data: any = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -44,4 +52,14 @@ function chatCompletionsUrl(baseUrl: string): string {
 
 function temperaturePayload(model: string): { temperature?: number } {
   return /gpt-?5/i.test(model) ? {} : { temperature: 0.7 };
+}
+
+function providerConnectionError(provider: ProviderRecord, endpoint: string, error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  return [
+    `无法连接 API Provider "${provider.name}"。`,
+    `请求地址: ${endpoint}`,
+    "请确认 Base URL 是 OpenAI-Compatible 的 /chat/completions 地址，并且当前设备或 NAS 可以访问该域名。",
+    `原始错误: ${detail}`,
+  ].join(" ");
 }

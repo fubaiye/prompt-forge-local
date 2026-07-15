@@ -57,4 +57,19 @@ describe("provider store", () => {
     expect(updated.apiKey).toBe("ollama-local-key");
     expect(updated.models).toEqual(["qwen3", "deepseek-r1"]);
   });
+
+  it("rejects API keys containing full-width punctuation", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "prompt-forge-"));
+    const store = createProviderStore(tempDir);
+
+    await expect(
+      store.create({
+        name: "Gemini",
+        baseUrl: "https://example.test/v1",
+        apiKey: "API Key：sk-test",
+        models: ["gemini-3.5-pro"],
+        defaultModel: "gemini-3.5-pro",
+      }),
+    ).rejects.toThrow("API Key 包含中文或全角字符");
+  });
 });
