@@ -147,6 +147,7 @@ textarea:focus-visible {
 }
 
 .update-indicator {
+  position: relative;
   display: inline-flex;
 }
 
@@ -176,6 +177,99 @@ textarea:focus-visible {
 
 .update-button svg {
   color: var(--accent);
+}
+
+.update-progress-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 70;
+  width: min(360px, calc(100vw - 32px));
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--bg-elevated);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+}
+
+.update-progress-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.update-progress-heading strong {
+  color: var(--text-primary);
+}
+
+.update-progress-heading span {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.update-progress-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  margin: 12px 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.update-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.update-progress-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.update-progress-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.update-progress-steps li span {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+}
+
+.update-progress-steps li.active {
+  color: var(--text-primary);
+}
+
+.update-progress-steps li.active span,
+.update-progress-steps li.complete span {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.update-progress-panel p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.update-refresh-action {
+  width: 100%;
+  margin-top: 12px;
 }
 
 .icon-button {
@@ -1175,6 +1269,12 @@ textarea:hover {
 
   .update-indicator,
   .update-button {
+    width: 100%;
+  }
+
+  .update-progress-panel {
+    right: auto;
+    left: 0;
     width: 100%;
   }
 
