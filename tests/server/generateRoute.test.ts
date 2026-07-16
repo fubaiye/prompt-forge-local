@@ -129,6 +129,56 @@ describe("generate route", () => {
     ]);
   });
 
+  it("accepts a single uploaded image up to the 20MB per-image limit", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "prompt-forge-"));
+    const providers = createProviderStore(tempDir);
+    const history = createHistoryStore(tempDir);
+    const provider = await providers.create({
+      name: "Vision Test",
+      baseUrl: "https://example.test/v1",
+      apiKey: "sk-test-1234567890",
+      models: ["qwen3-vl-plus"],
+      defaultModel: "qwen3-vl-plus",
+    });
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "LARGE IMAGE PROMPT" } }],
+        usage: { total_tokens: 96 },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = express();
+    app.use(express.json({ limit: "50mb" }));
+    app.use("/api/generate", createGenerateRouter(providers, history));
+
+    const imageBytes = 9 * 1024 * 1024;
+    const response = await requestJson(app, "/api/generate", {
+      requirement: "Use this uploaded reference image to improve the prompt.",
+      providerId: provider.id,
+      generationModel: "qwen3-vl-plus",
+      targetModel: "qwen3-vl-72b",
+      visionEnabled: true,
+      taskCategory: "img2img",
+      downstreamModel: "nano-banana-pro-i2i",
+      imageAttachments: [
+        {
+          id: "large-image",
+          name: "large-reference.png",
+          mimeType: "image/png",
+          size: imageBytes,
+          dataUrl: pngDataUrl(imageBytes),
+        },
+      ],
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.systemPrompt).toBe("LARGE IMAGE PROMPT");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("rejects short requirements before calling providers", async () => {
     tempDir = await mkdtemp(join(tmpdir(), "prompt-forge-"));
     const providers = createProviderStore(tempDir);
@@ -246,6 +296,12 @@ describe("generate route", () => {
 
 const SAMPLE_PNG_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
+function pngDataUrl(size: number): string {
+  const bytes = Buffer.alloc(size);
+  bytes.set(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  return `data:image/png;base64,${bytes.toString("base64")}`;
+}
 
 async function requestJson(app: Express, path: string, body: unknown): Promise<{ status: number; body: any }> {
   const server = createServer(app);

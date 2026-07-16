@@ -10,7 +10,7 @@ import type { ProviderStore } from "../storage/providerStore";
 const TASKS: TaskCategory[] = ["none", "text2img", "img2img", "edit", "text2video", "img2video"];
 const SUPPORTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 const MAX_IMAGE_ATTACHMENTS = 6;
-const MAX_IMAGE_DATA_BYTES = 8 * 1024 * 1024;
+const MAX_IMAGE_DATA_BYTES = 20 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_DATA_BYTES = 24 * 1024 * 1024;
 
 export function createGenerateRouter(providerStore: ProviderStore, historyStore: HistoryStore) {
@@ -120,7 +120,7 @@ function validateImageAttachment(value: unknown, index: number): ImageAttachment
     throw new Error(`imageAttachments[${index}].size does not match decoded image`);
   }
   if (imageBytes.length > MAX_IMAGE_DATA_BYTES) {
-    throw new Error(`imageAttachments[${index}] exceeds 8MB`);
+    throw new Error(`imageAttachments[${index}] exceeds 20MB`);
   }
   if (!matchesImageSignature(imageBytes, mimeType)) {
     throw new Error(`imageAttachments[${index}] does not match image type`);

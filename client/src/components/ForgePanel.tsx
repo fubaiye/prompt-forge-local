@@ -46,7 +46,7 @@ const taskIcon = {
 } satisfies Record<TaskCategory, typeof FileText>;
 
 const MAX_IMAGE_ATTACHMENTS = 6;
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_BYTES = 24 * 1024 * 1024;
 const SUPPORTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 
@@ -185,7 +185,7 @@ export function ForgePanel({
             />
             <Upload size={18} />
             <span>点击或拖拽上传图片</span>
-            <small>支持 PNG / JPG / WebP，单张不超过 8MB，总计不超过 24MB。需求里可写“参考图1，把图2改成...”</small>
+            <small>支持 PNG / JPG / WebP，单张不超过 20MB，总计不超过 24MB。需求里可写“参考图1，把图2改成...”</small>
           </label>
           {imageError && <p className="image-upload-error">{imageError}</p>}
           {form.imageAttachments?.length ? (
@@ -389,7 +389,7 @@ async function fileToAttachment(file: File): Promise<ImageAttachment> {
     throw new Error(`不支持的图片类型：${file.type || file.name}`);
   }
   if (file.size > MAX_IMAGE_BYTES) {
-    throw new Error(`${file.name} 超过 8MB`);
+    throw new Error(`${file.name} 超过 20MB`);
   }
 
   return {
