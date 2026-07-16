@@ -180,13 +180,14 @@ export function UpdateIndicator() {
       }
       setStatus("available");
     } catch (error) {
+      const errorMessage = describeUpdateError(error);
       setStatus("error");
-      setMessage(error instanceof Error ? error.message : "更新失败");
+      setMessage(errorMessage);
       setProgress({
         phase: "error",
         source: window.promptForgeUpdater ? "desktop" : "nas",
         targetVersion: update.latestVersion,
-        message: error instanceof Error ? error.message : "更新失败",
+        message: errorMessage,
       });
     }
   }
@@ -240,7 +241,9 @@ export function UpdateIndicator() {
       : status === "applying"
         ? "更新中..."
         : status === "error"
-          ? "更新异常"
+          ? update?.updateAvailable
+            ? "重试更新"
+            : "更新异常"
           : status === "complete"
             ? "更新完成"
             : `更新到 ${update?.latestVersion}`;
@@ -297,6 +300,26 @@ function desktopProgressFromStatus(update: DesktopUpdateCheck): UpdateProgress |
     bytesPerSecond: update.bytesPerSecond,
     message: update.message ?? `正在下载 ${Math.round(percent)}%`,
   };
+}
+
+function describeUpdateError(error: unknown): string {
+  const rawMessage = error instanceof Error ? error.message : "更新失败";
+  const normalized = rawMessage.toLowerCase();
+
+  if (normalized.includes("ghcr.io") && normalized.includes("unexpected eof")) {
+    return `GHCR 镜像仓库连接中断：NAS 在拉取 Docker 镜像时下载流提前断开。可以稍后再次点击更新，或在 Docker 项目里重新部署。原始错误：${rawMessage}`;
+  }
+
+  if (
+    normalized.includes("ghcr.io") &&
+    (normalized.includes("client.timeout") ||
+      normalized.includes("request canceled") ||
+      normalized.includes("waiting for connection"))
+  ) {
+    return `GHCR 镜像仓库连接超时：NAS 访问 GitHub Container Registry 不稳定。可以稍后再次点击更新，或在 Docker 项目里重新部署。原始错误：${rawMessage}`;
+  }
+
+  return rawMessage;
 }
 
 function UpdateProgressPanel({

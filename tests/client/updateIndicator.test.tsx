@@ -118,6 +118,44 @@ describe("UpdateIndicator", () => {
     expect(screen.getByText("下载进度")).toBeInTheDocument();
     expect(screen.getByText(/47 MB \/ 100 MB/)).toBeInTheDocument();
   });
+
+  it("explains GHCR pull interruptions during NAS updates", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path.includes("/api/update/check")) {
+          return jsonResponse({
+            currentVersion: "0.1.8",
+            latestVersion: "0.1.9",
+            updateAvailable: true,
+            releaseUrl: "https://github.com/fubaiye/prompt-forge-local/releases/tag/v0.1.9",
+          });
+        }
+        if (path.includes("/api/update/apply") && init?.method === "POST") {
+          return jsonResponse(
+            {
+              status: "error",
+              error:
+                'update failed for project prompt-forge: Error response from daemon: Get "https://ghcr.io/v2/": unexpected EOF',
+            },
+            502,
+          );
+        }
+        return jsonResponse({ error: "Unexpected request" }, 404);
+      }),
+    );
+
+    render(<UpdateIndicator />);
+
+    const updateButton = await screen.findByRole("button", { name: /更新到 0.1.9/ });
+    await act(async () => {
+      fireEvent.click(updateButton);
+    });
+
+    expect(screen.getByText(/GHCR 镜像仓库连接中断/)).toBeInTheDocument();
+    expect(screen.getByText(/可以稍后再次点击更新/)).toBeInTheDocument();
+  });
 });
 
 function jsonResponse(body: unknown, status = 200): Response {
