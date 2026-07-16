@@ -1,16 +1,18 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UpdateIndicator } from "../../client/src/components/UpdateIndicator";
 
 afterEach(() => {
+  cleanup();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  delete window.promptForgeUpdater;
 });
 
 describe("UpdateIndicator", () => {
-  it("shows staged progress while a NAS update is applied", async () => {
+  it("shows live NAS wait time and check count while a NAS update is applied", async () => {
     let checkCount = 0;
     vi.stubGlobal(
       "fetch",
@@ -64,6 +66,8 @@ describe("UpdateIndicator", () => {
     });
 
     expect(screen.getAllByText("等待服务恢复").length).toBeGreaterThan(0);
+    expect(screen.getByText("2 秒")).toBeInTheDocument();
+    expect(screen.getByText("第 1 次检测")).toBeInTheDocument();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2200);
@@ -71,6 +75,48 @@ describe("UpdateIndicator", () => {
 
     expect(screen.getAllByText("更新完成").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "刷新页面" })).toBeInTheDocument();
+  });
+
+  it("shows the real desktop updater download percent", async () => {
+    let statusCallback: ((status: any) => void) | undefined;
+    window.promptForgeUpdater = {
+      check: vi.fn(async () => ({
+        currentVersion: "0.1.8",
+        latestVersion: "0.1.9",
+        updateAvailable: true,
+        releaseUrl: "https://github.com/fubaiye/prompt-forge-local/releases/tag/v0.1.9",
+      })),
+      download: vi.fn(
+        () =>
+          new Promise<any>(() => {
+            statusCallback?.({
+              currentVersion: "0.1.8",
+              latestVersion: "0.1.9",
+              updateAvailable: true,
+              downloadPercent: 47.4,
+              transferred: 47 * 1024 * 1024,
+              total: 100 * 1024 * 1024,
+              message: "正在下载 47%",
+            });
+          }),
+      ),
+      install: vi.fn(async () => undefined),
+      onStatus: vi.fn((callback) => {
+        statusCallback = callback;
+        return () => undefined;
+      }),
+    };
+
+    render(<UpdateIndicator />);
+
+    const updateButton = await screen.findByRole("button", { name: /更新到 0.1.9/ });
+    await act(async () => {
+      fireEvent.click(updateButton);
+    });
+
+    expect(screen.getByText("47%")).toBeInTheDocument();
+    expect(screen.getByText("下载进度")).toBeInTheDocument();
+    expect(screen.getByText(/47 MB \/ 100 MB/)).toBeInTheDocument();
   });
 });
 

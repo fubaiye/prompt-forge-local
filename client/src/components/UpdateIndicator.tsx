@@ -4,11 +4,19 @@ import { applyUpdate, checkUpdate, type UpdateCheckResponse } from "../api";
 
 type UpdateStatus = "checking" | "idle" | "available" | "applying" | "complete" | "error";
 type UpdatePhase = "triggering" | "pulling" | "restarting" | "complete" | "manual" | "error";
+type UpdateProgressSource = "desktop" | "nas" | "manual";
 
 interface UpdateProgress {
   phase: UpdatePhase;
+  source: UpdateProgressSource;
   targetVersion?: string;
   message: string;
+  percent?: number;
+  transferred?: number;
+  total?: number;
+  bytesPerSecond?: number;
+  elapsedSeconds?: number;
+  checks?: number;
 }
 
 interface DesktopUpdateCheck {
@@ -17,6 +25,10 @@ interface DesktopUpdateCheck {
   updateAvailable: boolean;
   releaseUrl?: string;
   message?: string;
+  downloadPercent?: number;
+  transferred?: number;
+  total?: number;
+  bytesPerSecond?: number;
 }
 
 interface DesktopUpdater {
@@ -29,11 +41,11 @@ interface DesktopUpdater {
 const POLL_INTERVAL_MS = 2_000;
 const MAX_POLL_ATTEMPTS = 90;
 
-const NAS_PROGRESS_STEPS: Array<{ phase: UpdatePhase; label: string; percent: number }> = [
-  { phase: "triggering", label: "触发更新器", percent: 20 },
-  { phase: "pulling", label: "拉取新版本", percent: 55 },
-  { phase: "restarting", label: "等待服务恢复", percent: 82 },
-  { phase: "complete", label: "更新完成", percent: 100 },
+const NAS_PROGRESS_STEPS: Array<{ phase: UpdatePhase; label: string }> = [
+  { phase: "triggering", label: "触发更新器" },
+  { phase: "pulling", label: "拉取新版本" },
+  { phase: "restarting", label: "等待服务恢复" },
+  { phase: "complete", label: "更新完成" },
 ];
 
 declare global {
@@ -52,8 +64,14 @@ export function UpdateIndicator() {
     let cancelled = false;
     const unsubscribe = window.promptForgeUpdater?.onStatus?.((nextStatus) => {
       if (!cancelled) {
+        const desktopProgress = desktopProgressFromStatus(nextStatus);
         setUpdate(normalizeDesktopUpdate(nextStatus));
-        setStatus(nextStatus.updateAvailable ? "available" : "idle");
+        if (desktopProgress) {
+          setProgress(desktopProgress);
+          setStatus(desktopProgress.phase === "complete" ? "complete" : "applying");
+        } else {
+          setStatus(nextStatus.updateAvailable ? "available" : "idle");
+        }
         setMessage(nextStatus.message ?? "");
       }
     });
@@ -94,7 +112,11 @@ export function UpdateIndicator() {
     setMessage("");
     setProgress({
       phase: "triggering",
+      source: window.promptForgeUpdater ? "desktop" : "nas",
       targetVersion: update.latestVersion,
+      percent: window.promptForgeUpdater ? 0 : undefined,
+      elapsedSeconds: window.promptForgeUpdater ? undefined : 0,
+      checks: window.promptForgeUpdater ? undefined : 0,
       message: `正在触发更新到 ${update.latestVersion ?? "最新版本"}。`,
     });
 
@@ -102,13 +124,17 @@ export function UpdateIndicator() {
       if (window.promptForgeUpdater) {
         setProgress({
           phase: "pulling",
+          source: "desktop",
           targetVersion: update.latestVersion,
+          percent: 0,
           message: "正在下载安装包，完成后应用会自动安装。",
         });
         await window.promptForgeUpdater.download();
         setProgress({
-          phase: "restarting",
+          phase: "complete",
+          source: "desktop",
           targetVersion: update.latestVersion,
+          percent: 100,
           message: "安装包已下载，正在准备重启应用。",
         });
         await window.promptForgeUpdater.install();
@@ -120,6 +146,7 @@ export function UpdateIndicator() {
       if (result.status === "manual" && result.releaseUrl) {
         setProgress({
           phase: "manual",
+          source: "manual",
           targetVersion: result.latestVersion,
           message: "当前环境未配置自动更新，已打开 GitHub Release 页面，请手动下载更新。",
         });
@@ -130,7 +157,9 @@ export function UpdateIndicator() {
       if (result.status === "latest") {
         setProgress({
           phase: "complete",
+          source: "manual",
           targetVersion: result.latestVersion,
+          percent: 100,
           message: `当前已经是最新版本 ${result.currentVersion}。`,
         });
         setUpdate(result);
@@ -140,8 +169,11 @@ export function UpdateIndicator() {
       if (result.status === "started") {
         setProgress({
           phase: "pulling",
+          source: "nas",
           targetVersion: result.latestVersion,
-          message: "更新器已收到请求，正在拉取新镜像并准备重启服务。",
+          elapsedSeconds: 0,
+          checks: 0,
+          message: "更新器已收到请求，Docker 镜像拉取由 NAS / Watchtower 执行中。",
         });
         await waitForUpdateCompletion(result.latestVersion);
         return;
@@ -152,6 +184,7 @@ export function UpdateIndicator() {
       setMessage(error instanceof Error ? error.message : "更新失败");
       setProgress({
         phase: "error",
+        source: window.promptForgeUpdater ? "desktop" : "nas",
         targetVersion: update.latestVersion,
         message: error instanceof Error ? error.message : "更新失败",
       });
@@ -167,7 +200,11 @@ export function UpdateIndicator() {
         if (targetVersion && isCurrentVersion(nextUpdate, targetVersion)) {
           setProgress({
             phase: "complete",
+            source: "nas",
             targetVersion,
+            percent: 100,
+            elapsedSeconds: elapsedSecondsForAttempt(attempt),
+            checks: attempt + 1,
             message: `已更新到 ${targetVersion}，刷新页面后即可使用新版本。`,
           });
           setStatus("complete");
@@ -175,13 +212,19 @@ export function UpdateIndicator() {
         }
         setProgress({
           phase: attempt < 2 ? "pulling" : "restarting",
+          source: "nas",
           targetVersion,
-          message: "更新器仍在处理。拉取镜像、替换容器和重启服务可能需要几分钟。",
+          elapsedSeconds: elapsedSecondsForAttempt(attempt),
+          checks: attempt + 1,
+          message: "更新器仍在处理。Docker 拉取镜像、替换容器和重启服务可能需要几分钟。",
         });
       } catch {
         setProgress({
           phase: "restarting",
+          source: "nas",
           targetVersion,
+          elapsedSeconds: elapsedSecondsForAttempt(attempt),
+          checks: attempt + 1,
           message: "服务正在重启或网络暂时不可达，正在继续等待恢复。",
         });
       }
@@ -240,6 +283,22 @@ function normalizeDesktopUpdate(update: DesktopUpdateCheck): UpdateCheckResponse
   };
 }
 
+function desktopProgressFromStatus(update: DesktopUpdateCheck): UpdateProgress | null {
+  if (typeof update.downloadPercent !== "number") return null;
+
+  const percent = clampPercent(update.downloadPercent);
+  return {
+    phase: percent >= 100 ? "complete" : "pulling",
+    source: "desktop",
+    targetVersion: update.latestVersion,
+    percent,
+    transferred: update.transferred,
+    total: update.total,
+    bytesPerSecond: update.bytesPerSecond,
+    message: update.message ?? `正在下载 ${Math.round(percent)}%`,
+  };
+}
+
 function UpdateProgressPanel({
   progress,
   onRefresh,
@@ -249,15 +308,23 @@ function UpdateProgressPanel({
   onRefresh(): void;
   showRefresh: boolean;
 }) {
-  const percent = progress.phase === "manual" || progress.phase === "error" ? 100 : progressPercent(progress.phase);
+  const percent = typeof progress.percent === "number" ? clampPercent(progress.percent) : undefined;
+  const metric = progressMetric(progress);
   return (
     <div className="update-progress-panel" role="status" aria-live="polite">
       <div className="update-progress-heading">
         <strong>{progressTitle(progress.phase)}</strong>
         {progress.targetVersion && <span>目标版本 {progress.targetVersion}</span>}
       </div>
-      <div className="update-progress-bar" aria-hidden="true">
-        <span style={{ width: `${percent}%` }} />
+      {metric && (
+        <div className="update-progress-metric">
+          <strong>{metric.value}</strong>
+          <span>{metric.label}</span>
+          {metric.detail && <small>{metric.detail}</small>}
+        </div>
+      )}
+      <div className={percent === undefined ? "update-progress-bar indeterminate" : "update-progress-bar"} aria-hidden="true">
+        <span style={percent === undefined ? undefined : { width: `${percent}%` }} />
       </div>
       <ol className="update-progress-steps">
         {NAS_PROGRESS_STEPS.map((step) => (
@@ -283,8 +350,24 @@ function progressTitle(phase: UpdatePhase): string {
   return NAS_PROGRESS_STEPS.find((step) => step.phase === phase)?.label ?? "更新中";
 }
 
-function progressPercent(phase: UpdatePhase): number {
-  return NAS_PROGRESS_STEPS.find((step) => step.phase === phase)?.percent ?? 0;
+function progressMetric(progress: UpdateProgress): { value: string; label: string; detail?: string } | null {
+  if (typeof progress.percent === "number") {
+    return {
+      value: `${Math.round(clampPercent(progress.percent))}%`,
+      label: progress.source === "desktop" && progress.phase !== "complete" ? "下载进度" : "完成进度",
+      detail: progress.transferred && progress.total ? `${formatBytes(progress.transferred)} / ${formatBytes(progress.total)}` : undefined,
+    };
+  }
+
+  if (typeof progress.elapsedSeconds === "number") {
+    return {
+      value: formatElapsed(progress.elapsedSeconds),
+      label: `第 ${progress.checks ?? 0} 次检测`,
+      detail: "NAS Docker 镜像拉取进度由 Watchtower 执行，应用会用版本检测确认完成。",
+    };
+  }
+
+  return null;
 }
 
 function stepClass(step: UpdatePhase, current: UpdatePhase): string {
@@ -302,6 +385,26 @@ function isCurrentVersion(update: UpdateCheckResponse, targetVersion: string): b
 
 function normalizeVersion(version: string): string {
   return version.trim().replace(/^v/i, "");
+}
+
+function elapsedSecondsForAttempt(attempt: number): number {
+  return Math.round(((attempt + 1) * POLL_INTERVAL_MS) / 1000);
+}
+
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 MB";
+  return `${Math.round(bytes / 1024 / 1024)} MB`;
+}
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return remainingSeconds === 0 ? `${minutes} 分钟` : `${minutes} 分 ${remainingSeconds} 秒`;
 }
 
 function delay(ms: number): Promise<void> {

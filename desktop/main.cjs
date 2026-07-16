@@ -42,10 +42,15 @@ autoUpdater.on("update-not-available", (info) => {
 });
 
 autoUpdater.on("download-progress", (progress) => {
+  const percent = Math.max(0, Math.min(100, Number(progress.percent) || 0));
   sendUpdateStatus({
     ...lastUpdateStatus,
     updateAvailable: true,
-    message: `正在下载 ${Math.round(progress.percent)}%`,
+    downloadPercent: percent,
+    transferred: progress.transferred,
+    total: progress.total,
+    bytesPerSecond: progress.bytesPerSecond,
+    message: `正在下载 ${Math.round(percent)}%`,
   });
 });
 
@@ -53,6 +58,7 @@ autoUpdater.on("update-downloaded", (info) => {
   sendUpdateStatus({
     latestVersion: info.version,
     updateAvailable: true,
+    downloadPercent: 100,
     message: "更新已下载，准备安装",
   });
 });

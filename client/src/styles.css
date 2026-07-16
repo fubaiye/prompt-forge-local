@@ -225,6 +225,48 @@ textarea:focus-visible {
   transition: width 0.25s ease;
 }
 
+.update-progress-bar.indeterminate span {
+  width: 38%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: update-progress-slide 1.2s ease-in-out infinite;
+}
+
+.update-progress-metric {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-top: 12px;
+}
+
+.update-progress-metric strong {
+  color: var(--text-primary);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.update-progress-metric span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.update-progress-metric small {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@keyframes update-progress-slide {
+  0% {
+    transform: translateX(-110%);
+  }
+
+  100% {
+    transform: translateX(270%);
+  }
+}
+
 .update-progress-steps {
   display: grid;
   gap: 8px;
