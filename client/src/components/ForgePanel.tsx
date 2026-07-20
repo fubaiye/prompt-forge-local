@@ -1,5 +1,7 @@
 import {
   Brain,
+  ChevronDown,
+  ChevronUp,
   Eye,
   FileText,
   ImageIcon,
@@ -12,7 +14,7 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TARGET_MODELS, TASK_CATEGORIES } from "../../../shared/modelCatalog";
 import type {
   DownstreamModel,
@@ -31,10 +33,19 @@ interface ForgePanelProps {
   downstreamOptions: DownstreamModel[];
   canGenerate: boolean;
   isGenerating: boolean;
+  generationError?: string;
   onChange(patch: Partial<GenerateRequest>): void;
   onGenerate(): void;
   onOpenSettings(): void;
 }
+
+type SectionId = "requirement" | "images" | "models";
+
+const SECTION_NAV: Array<{ id: SectionId; label: string }> = [
+  { id: "requirement", label: "需求描述" },
+  { id: "images", label: "参考图片" },
+  { id: "models", label: "模型设置" },
+];
 
 const taskIcon = {
   none: FileText,
@@ -49,6 +60,7 @@ const MAX_IMAGE_ATTACHMENTS = 6;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_BYTES = 24 * 1024 * 1024;
 const SUPPORTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+const MODEL_SETTINGS_STORAGE_KEY = "prompt-forge-model-settings-open";
 
 export function ForgePanel({
   form,
@@ -57,6 +69,7 @@ export function ForgePanel({
   downstreamOptions,
   canGenerate,
   isGenerating,
+  generationError = "",
   onChange,
   onGenerate,
   onOpenSettings,
@@ -66,9 +79,22 @@ export function ForgePanel({
   const [modelQuery, setModelQuery] = useState("");
   const [imageError, setImageError] = useState("");
   const [isReadingImages, setIsReadingImages] = useState(false);
+  const [activeSection, setActiveSection] = useState<SectionId>("requirement");
+  const [modelSettingsOpen, setModelSettingsOpen] = useState(readStoredModelSettingsOpen);
 
-  const vendors = useMemo(() => Array.from(new Set(TARGET_MODELS.map((model) => model.vendor))).sort(), []);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const requirementRef = useRef<HTMLElement | null>(null);
+  const imagesRef = useRef<HTMLElement | null>(null);
+  const modelsRef = useRef<HTMLElement | null>(null);
+  const requirementInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const providerSelectRef = useRef<HTMLSelectElement | null>(null);
+  const generationModelRef = useRef<HTMLInputElement | null>(null);
+
+  const imageAttachments = form.imageAttachments ?? [];
   const selectedTarget = TARGET_MODELS.find((model) => model.value === form.targetModel);
+  const vendors = useMemo(() => Array.from(new Set(TARGET_MODELS.map((model) => model.vendor))).sort(), []);
+  const hasModelConfigError = isModelConfigError(generationError);
+
   const targetModels = useMemo(() => {
     const query = modelQuery.trim().toLowerCase();
     return TARGET_MODELS.filter((model) => {
@@ -80,6 +106,67 @@ export function ForgePanel({
     });
   }, [familyFilter, form.visionEnabled, modelQuery, vendorFilter]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(MODEL_SETTINGS_STORAGE_KEY, String(modelSettingsOpen));
+    } catch {
+      // Local storage can be unavailable in hardened browser contexts.
+    }
+  }, [modelSettingsOpen]);
+
+  useEffect(() => {
+    const field = requirementInputRef.current;
+    if (!field) return;
+    field.style.height = "auto";
+    field.style.height = `${Math.min(field.scrollHeight, 288)}px`;
+  }, [form.requirement]);
+
+  useEffect(() => {
+    if (!hasModelConfigError) return;
+    setModelSettingsOpen(true);
+    setActiveSection("models");
+    window.setTimeout(() => {
+      if (!form.providerId) providerSelectRef.current?.focus();
+      else generationModelRef.current?.focus();
+    }, 0);
+  }, [form.providerId, generationError, hasModelConfigError]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const composing = event.isComposing || event.keyCode === 229;
+      if (composing || event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) return;
+      if (!canGenerate || isGenerating || isReadingImages) return;
+      event.preventDefault();
+      onGenerate();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canGenerate, isGenerating, isReadingImages, onGenerate]);
+
+  useEffect(() => {
+    const root = scrollAreaRef.current;
+    if (!root || typeof IntersectionObserver === "undefined") return;
+    const sections: Array<[SectionId, HTMLElement | null]> = [
+      ["requirement", requirementRef.current],
+      ["images", imagesRef.current],
+      ["models", modelsRef.current],
+    ];
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        const nextId = sections.find(([, element]) => element === visible?.target)?.[0];
+        if (nextId) setActiveSection(nextId);
+      },
+      { root, threshold: [0.24, 0.48, 0.72], rootMargin: "-10% 0px -58% 0px" },
+    );
+    sections.forEach(([, element]) => {
+      if (element) observer.observe(element);
+    });
+    return () => observer.disconnect();
+  }, [modelSettingsOpen, form.taskCategory]);
+
   function setVisionEnabled(visionEnabled: boolean) {
     const patch: Partial<GenerateRequest> = { visionEnabled };
     if (!visionEnabled) patch.imageAttachments = undefined;
@@ -87,6 +174,15 @@ export function ForgePanel({
       patch.targetModel = TARGET_MODELS.find((model) => model.vision)?.value ?? form.targetModel;
     }
     onChange(patch);
+  }
+
+  function scrollToSection(sectionId: SectionId) {
+    const target = sectionId === "requirement" ? requirementRef.current : sectionId === "images" ? imagesRef.current : modelsRef.current;
+    setActiveSection(sectionId);
+    target?.scrollIntoView({
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      block: "start",
+    });
   }
 
   async function addImageFiles(fileList: FileList | null) {
@@ -131,67 +227,55 @@ export function ForgePanel({
   }
 
   function removeImage(id: string) {
-    onChange({ imageAttachments: form.imageAttachments?.filter((image) => image.id !== id) });
+    onChange({ imageAttachments: imageAttachments.filter((image) => image.id !== id) });
   }
+
+  const actionHint = actionStatusText(form, canGenerate, isGenerating, isReadingImages);
+  const modelSummary = selectedProvider
+    ? `${selectedProvider.name} · ${form.generationModel || "未选择调用模型"}`
+    : `未选择 API · ${form.generationModel || "未选择调用模型"}`;
 
   return (
     <Card className="forge-panel" aria-label="提示词配置栏">
-      <div className="forge-scroll">
-        <div className="panel-title">
-          <div>
-            <span>CONFIGURATION</span>
-            <h2>参数配置</h2>
-          </div>
-          <Brain size={20} />
-        </div>
+      <ConfigurationHeader />
+      <ConfigurationSectionNav activeSection={activeSection} onSelect={scrollToSection} />
 
-        <section className="config-section">
-          <div className="section-heading">
+      <div className="forge-scroll" data-testid="configuration-scroll-area" ref={scrollAreaRef}>
+        <section className="config-section requirement-section" id="config-requirement" ref={requirementRef}>
+          <div className="section-heading compact-heading">
             <strong>需求 / 使用场景</strong>
-            <span>{form.requirement.trim().length} chars</span>
           </div>
-          <textarea
-            value={form.requirement}
-            onChange={(event) => onChange({ requirement: event.target.value })}
-            placeholder="例如：参考图1的表达方式及颜色，将图2变成一样的，字体清晰无锯齿"
-            rows={5}
-          />
-          <p className="field-help">写清角色、任务、输出风格和限制。上传图片后可直接用“图1、图2”引用。</p>
+          <label className="requirement-input-wrap">
+            <span className="sr-only">需求描述</span>
+            <textarea
+              ref={requirementInputRef}
+              value={form.requirement}
+              onChange={(event) => onChange({ requirement: event.target.value })}
+              aria-label="需求描述"
+              placeholder="例如：参考图1的表达方式及颜色，将图2变成一样的，字体清晰无锯齿"
+              rows={4}
+            />
+            <span className="textarea-count">{form.requirement.trim().length} chars</span>
+          </label>
+          <p className="field-help">写清任务、输出风格和限制。上传图片后可直接用“图1、图2”引用。</p>
         </section>
 
-        <section className="config-section">
-          <div className="section-heading">
+        <section className="config-section reference-images-section" id="config-images" ref={imagesRef}>
+          <div className="section-heading compact-heading">
             <strong>参考图片</strong>
-            <span>{form.imageAttachments?.length ?? 0}/{MAX_IMAGE_ATTACHMENTS}</span>
+            <span>{imageAttachments.length}/{MAX_IMAGE_ATTACHMENTS}</span>
           </div>
-          <label
-            className="image-upload-zone"
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              void addImageFiles(event.dataTransfer.files);
-            }}
-          >
-            <input
-              aria-label="上传图片"
-              type="file"
-              accept={SUPPORTED_IMAGE_TYPES.join(",")}
-              multiple
+          {imageAttachments.length === 0 ? (
+            <UploadZone
               disabled={isReadingImages || isGenerating}
-              onChange={(event) => {
-                void addImageFiles(event.target.files);
-                event.currentTarget.value = "";
-              }}
+              label="点击或拖拽上传图片"
+              description="PNG / JPG / WebP，单张 ≤20MB，总计 ≤24MB。"
+              onFiles={addImageFiles}
             />
-            <Upload size={18} />
-            <span>点击或拖拽上传图片</span>
-            <small>支持 PNG / JPG / WebP，单张不超过 20MB，总计不超过 24MB。需求里可写“参考图1，把图2改成...”</small>
-          </label>
-          {imageError && <p className="image-upload-error">{imageError}</p>}
-          {form.imageAttachments?.length ? (
-            <div className="image-attachment-list" aria-label="已上传图片">
-              {form.imageAttachments.map((image, index) => (
-                <article key={image.id} className="image-attachment">
+          ) : (
+            <div className="image-attachment-grid" aria-label="已上传图片">
+              {imageAttachments.map((image, index) => (
+                <article key={image.id} className="image-thumb-card">
                   <img src={image.dataUrl} alt={`图${index + 1}`} />
                   <div>
                     <strong>图{index + 1}</strong>
@@ -207,160 +291,198 @@ export function ForgePanel({
                   </button>
                 </article>
               ))}
+              {imageAttachments.length < MAX_IMAGE_ATTACHMENTS && (
+                <UploadZone
+                  compact
+                  disabled={isReadingImages || isGenerating}
+                  label="添加图片"
+                  description="继续上传"
+                  onFiles={addImageFiles}
+                />
+              )}
             </div>
-          ) : null}
+          )}
+          {imageError && <p className="image-upload-error">{imageError}</p>}
         </section>
 
-        <section className="config-section">
-          <div className="section-heading">
-            <strong>本地 API</strong>
-          </div>
-          <label className="field-block">
-            <span>API Provider</span>
-            <select value={form.providerId} onChange={(event) => onChange({ providerId: event.target.value })}>
-              <option value="">选择本地 API</option>
-              {providers.map((provider) => (
-                <option key={provider.id} value={provider.id}>
-                  {provider.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field-block">
-            <span>调用模型</span>
-            <input
-              value={form.generationModel}
-              onChange={(event) => onChange({ generationModel: event.target.value })}
-              list="generation-models"
-              placeholder={selectedProvider ? "输入或选择模型 ID" : "先添加 API Provider"}
-            />
-            <datalist id="generation-models">
-              {selectedProvider?.models.map((model) => (
-                <option key={model} value={model} />
-              ))}
-            </datalist>
-          </label>
-          {providers.length === 0 && (
-            <Button className="full-width" type="button" variant="secondary" onClick={onOpenSettings}>
-              <Settings size={16} />
-              添加 OpenAI-Compatible API
-            </Button>
+        <section className="config-section model-settings-section" id="config-models" ref={modelsRef}>
+          <button
+            className="model-settings-toggle"
+            type="button"
+            aria-expanded={modelSettingsOpen}
+            aria-controls="model-settings-content"
+            onClick={() => setModelSettingsOpen((current) => !current)}
+          >
+            <div>
+              <strong>模型设置</strong>
+              <span>{modelSummary}</span>
+            </div>
+            <em>{modelSettingsOpen ? "收起模型设置" : "展开模型设置"}</em>
+            {modelSettingsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+
+          {modelSettingsOpen && (
+            <div className="model-settings-content" id="model-settings-content">
+              <section className={hasModelConfigError ? "model-subsection model-subsection-error" : "model-subsection"}>
+                <div className="section-heading compact-heading">
+                  <strong>本地 API</strong>
+                </div>
+                <label className="field-block">
+                  <span>API Provider</span>
+                  <select
+                    ref={providerSelectRef}
+                    value={form.providerId}
+                    onChange={(event) => onChange({ providerId: event.target.value })}
+                    aria-label="API Provider"
+                  >
+                    <option value="">选择本地 API</option>
+                    {providers.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field-block">
+                  <span>调用模型</span>
+                  <input
+                    ref={generationModelRef}
+                    value={form.generationModel}
+                    onChange={(event) => onChange({ generationModel: event.target.value })}
+                    list="generation-models"
+                    aria-label="调用模型"
+                    placeholder={selectedProvider ? "输入或选择模型 ID" : "先添加 API Provider"}
+                  />
+                  <datalist id="generation-models">
+                    {selectedProvider?.models.map((model) => (
+                      <option key={model} value={model} />
+                    ))}
+                  </datalist>
+                </label>
+                {providers.length === 0 && (
+                  <Button className="full-width" type="button" variant="secondary" onClick={onOpenSettings}>
+                    <Settings size={16} />
+                    添加 OpenAI-Compatible API
+                  </Button>
+                )}
+              </section>
+
+              <section className="model-subsection">
+                <div className="section-heading compact-heading">
+                  <strong>大脑模型能力</strong>
+                </div>
+                <div className="select-card-list">
+                  <SelectCard
+                    icon={<Type size={18} />}
+                    title="纯文本"
+                    description="LLM 不看图片/视频，只处理文字输入。"
+                    selected={!form.visionEnabled}
+                    onClick={() => setVisionEnabled(false)}
+                  />
+                  <SelectCard
+                    icon={<Eye size={18} />}
+                    title="图像识别"
+                    description="VLM 接收图片/视频输入，并需要明确读图规则。"
+                    selected={form.visionEnabled}
+                    onClick={() => setVisionEnabled(true)}
+                  />
+                </div>
+              </section>
+
+              <section className="model-subsection">
+                <div className="section-heading compact-heading">
+                  <strong>目标大脑模型</strong>
+                  <span>{targetModels.length} 可选</span>
+                </div>
+                <div className="model-filter-row">
+                  <label className="search-field">
+                    <Search size={16} />
+                    <input value={modelQuery} onChange={(event) => setModelQuery(event.target.value)} placeholder="搜索模型或厂商" />
+                  </label>
+                  <select value={vendorFilter} onChange={(event) => setVendorFilter(event.target.value)} aria-label="厂商筛选">
+                    <option value="all">全部厂商</option>
+                    {vendors.map((vendor) => (
+                      <option key={vendor} value={vendor}>
+                        {vendor}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="filter-chips" aria-label="模型类型筛选">
+                  <button className={familyFilter === "all" ? "active" : ""} type="button" onClick={() => setFamilyFilter("all")}>
+                    全部
+                  </button>
+                  <button className={familyFilter === "closed" ? "active" : ""} type="button" onClick={() => setFamilyFilter("closed")}>
+                    闭源
+                  </button>
+                  <button className={familyFilter === "open" ? "active" : ""} type="button" onClick={() => setFamilyFilter("open")}>
+                    开源
+                  </button>
+                </div>
+                <div className="model-list" role="listbox" aria-label="目标模型列表">
+                  {targetModels.map((model) => (
+                    <ModelItem
+                      key={model.value}
+                      title={model.label}
+                      vendor={model.vendor}
+                      capability={model.vision ? "Vision" : "Text"}
+                      meta={model.reasoning ? "Reasoning" : undefined}
+                      tag={model.tag}
+                      selected={form.targetModel === model.value}
+                      onClick={() => onChange({ targetModel: model.value })}
+                    />
+                  ))}
+                </div>
+              </section>
+
+              <section className="model-subsection">
+                <div className="section-heading compact-heading">
+                  <strong>下游生成任务</strong>
+                </div>
+                <div className="select-card-list">
+                  {TASK_CATEGORIES.map((task) => {
+                    const Icon = taskIcon[task.key];
+                    return (
+                      <SelectCard
+                        key={task.key}
+                        icon={<Icon size={18} />}
+                        title={task.name}
+                        description={task.desc}
+                        selected={form.taskCategory === task.key}
+                        onClick={() => onChange({ taskCategory: task.key })}
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+
+              {form.taskCategory !== "none" && (
+                <section className="model-subsection">
+                  <div className="section-heading compact-heading">
+                    <strong>下游模型</strong>
+                    <span>{downstreamOptions.length} 可选</span>
+                  </div>
+                  <div className="model-list compact" role="listbox" aria-label="下游模型列表">
+                    {downstreamOptions.map((model) => (
+                      <ModelItem
+                        key={model.value}
+                        title={model.label}
+                        vendor={model.vendor}
+                        capability={model.category}
+                        tag={model.tag}
+                        selected={form.downstreamModel === model.value}
+                        onClick={() => onChange({ downstreamModel: model.value })}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
           )}
         </section>
-
-        <section className="config-section">
-          <div className="section-heading">
-            <strong>大脑模型能力</strong>
-          </div>
-          <div className="select-card-list">
-            <SelectCard
-              icon={<Type size={18} />}
-              title="纯文本"
-              description="LLM 不看图片/视频，只处理文字输入。"
-              selected={!form.visionEnabled}
-              onClick={() => setVisionEnabled(false)}
-            />
-            <SelectCard
-              icon={<Eye size={18} />}
-              title="图像识别"
-              description="VLM 接收图片/视频输入，并需要明确读图规则。"
-              selected={form.visionEnabled}
-              onClick={() => setVisionEnabled(true)}
-            />
-          </div>
-        </section>
-
-        <section className="config-section">
-          <div className="section-heading">
-            <strong>目标大脑模型</strong>
-            <span>{targetModels.length} 可选</span>
-          </div>
-          <div className="model-filter-row">
-            <label className="search-field">
-              <Search size={16} />
-              <input value={modelQuery} onChange={(event) => setModelQuery(event.target.value)} placeholder="搜索模型或厂商" />
-            </label>
-            <select value={vendorFilter} onChange={(event) => setVendorFilter(event.target.value)} aria-label="厂商筛选">
-              <option value="all">全部厂商</option>
-              {vendors.map((vendor) => (
-                <option key={vendor} value={vendor}>
-                  {vendor}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="filter-chips" aria-label="模型类型筛选">
-            <button className={familyFilter === "all" ? "active" : ""} type="button" onClick={() => setFamilyFilter("all")}>
-              全部
-            </button>
-            <button className={familyFilter === "closed" ? "active" : ""} type="button" onClick={() => setFamilyFilter("closed")}>
-              闭源
-            </button>
-            <button className={familyFilter === "open" ? "active" : ""} type="button" onClick={() => setFamilyFilter("open")}>
-              开源
-            </button>
-          </div>
-          <div className="model-list" role="listbox" aria-label="目标模型列表">
-            {targetModels.map((model) => (
-              <ModelItem
-                key={model.value}
-                title={model.label}
-                vendor={model.vendor}
-                capability={model.vision ? "Vision" : "Text"}
-                meta={model.reasoning ? "Reasoning" : undefined}
-                tag={model.tag}
-                selected={form.targetModel === model.value}
-                onClick={() => onChange({ targetModel: model.value })}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="config-section">
-          <div className="section-heading">
-            <strong>下游生成任务</strong>
-          </div>
-          <div className="select-card-list">
-            {TASK_CATEGORIES.map((task) => {
-              const Icon = taskIcon[task.key];
-              return (
-                <SelectCard
-                  key={task.key}
-                  icon={<Icon size={18} />}
-                  title={task.name}
-                  description={task.desc}
-                  selected={form.taskCategory === task.key}
-                  onClick={() => onChange({ taskCategory: task.key })}
-                />
-              );
-            })}
-          </div>
-        </section>
-
-        {form.taskCategory !== "none" && (
-          <section className="config-section">
-            <div className="section-heading">
-              <strong>下游模型</strong>
-              <span>{downstreamOptions.length} 可选</span>
-            </div>
-            <div className="model-list compact" role="listbox" aria-label="下游模型列表">
-              {downstreamOptions.map((model) => (
-                <ModelItem
-                  key={model.value}
-                  title={model.label}
-                  vendor={model.vendor}
-                  capability={model.category}
-                  tag={model.tag}
-                  selected={form.downstreamModel === model.value}
-                  onClick={() => onChange({ downstreamModel: model.value })}
-                />
-              ))}
-            </div>
-          </section>
-        )}
       </div>
 
-      <div className="forge-footer">
+      <div className="forge-footer" data-testid="configuration-action-bar">
         <Button
           className="generate-button"
           type="button"
@@ -373,15 +495,149 @@ export function ForgePanel({
           {isGenerating ? "生成中..." : isReadingImages ? "读取图片中..." : "生成 System Prompt"}
         </Button>
         <p className={canGenerate && !isReadingImages ? "footer-status ready" : "footer-status"}>
-          {isReadingImages
-            ? "正在读取图片，完成后即可生成。"
-            : canGenerate
-              ? "配置已就绪，可以开始生成。"
-              : "至少输入 4 个字，并选择 API Provider 与调用模型。"}
+          {actionHint}
+          {canGenerate && !isGenerating && !isReadingImages && (
+            <span className="shortcut-hint">
+              <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Enter</kbd>
+            </span>
+          )}
         </p>
       </div>
     </Card>
   );
+}
+
+function ConfigurationHeader() {
+  return (
+    <div className="configuration-header panel-title">
+      <div>
+        <span>CONFIGURATION</span>
+        <h2>参数配置</h2>
+      </div>
+      <Brain size={20} />
+    </div>
+  );
+}
+
+function ConfigurationSectionNav({
+  activeSection,
+  onSelect,
+}: {
+  activeSection: SectionId;
+  onSelect(sectionId: SectionId): void;
+}) {
+  return (
+    <nav className="configuration-section-nav" aria-label="配置分区">
+      {SECTION_NAV.map((section) => (
+        <button
+          key={section.id}
+          type="button"
+          className={activeSection === section.id ? "active" : ""}
+          aria-current={activeSection === section.id ? "true" : undefined}
+          onClick={() => onSelect(section.id)}
+        >
+          <span aria-hidden="true" />
+          {section.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function UploadZone({
+  compact = false,
+  disabled,
+  label,
+  description,
+  onFiles,
+}: {
+  compact?: boolean;
+  disabled: boolean;
+  label: string;
+  description: string;
+  onFiles(fileList: FileList | null): void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const className = compact ? "image-upload-zone image-upload-tile" : "image-upload-zone";
+
+  function openPicker() {
+    if (!disabled) inputRef.current?.click();
+  }
+
+  return (
+    <div
+      className={className}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled}
+      onClick={openPicker}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        openPicker();
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        onFiles(event.dataTransfer.files);
+      }}
+    >
+      <input
+        ref={inputRef}
+        aria-label={compact ? "添加图片" : "上传图片"}
+        type="file"
+        accept={SUPPORTED_IMAGE_TYPES.join(",")}
+        multiple
+        disabled={disabled}
+        onChange={(event) => {
+          void onFiles(event.target.files);
+          event.currentTarget.value = "";
+        }}
+      />
+      <Upload size={compact ? 16 : 18} />
+      <span>{label}</span>
+      <small>{description}</small>
+    </div>
+  );
+}
+
+function actionStatusText(form: GenerateRequest, canGenerate: boolean, isGenerating: boolean, isReadingImages: boolean): string {
+  if (isReadingImages) return "正在读取图片，完成后即可生成。";
+  if (isGenerating) return "正在生成 System Prompt，请稍候。";
+  if (canGenerate) return "配置就绪，可以开始生成。";
+  if (form.requirement.trim().length < 4) return "至少输入 4 个字。";
+  if (!form.providerId) return "请选择 API Provider。";
+  if (!form.generationModel.trim()) return "请选择或输入调用模型。";
+  if (form.taskCategory !== "none" && !form.downstreamModel) return "请选择下游模型。";
+  return "请补全配置后再生成。";
+}
+
+function isModelConfigError(error: string): boolean {
+  const normalized = error.toLowerCase();
+  return Boolean(
+    error &&
+      (normalized.includes("provider") ||
+        normalized.includes("api") ||
+        normalized.includes("model") ||
+        normalized.includes("base url") ||
+        normalized.includes("fetch failed") ||
+        normalized.includes("401") ||
+        normalized.includes("403") ||
+        normalized.includes("模型") ||
+        normalized.includes("接口")),
+  );
+}
+
+function readStoredModelSettingsOpen(): boolean {
+  try {
+    return localStorage.getItem(MODEL_SETTINGS_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 }
 
 async function fileToAttachment(file: File): Promise<ImageAttachment> {

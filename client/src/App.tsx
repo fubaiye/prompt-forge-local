@@ -200,6 +200,7 @@ export default function App() {
           downstreamOptions={downstreamOptions}
           canGenerate={canGenerate}
           isGenerating={isGenerating}
+          generationError={error}
           onChange={updateForm}
           onGenerate={handleGenerate}
           onOpenSettings={() => setSettingsOpen(true)}
