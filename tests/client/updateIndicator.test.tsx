@@ -60,12 +60,15 @@ describe("UpdateIndicator", () => {
 
     expect(screen.getAllByText("触发更新器").length).toBeGreaterThan(0);
     expect(screen.getAllByText("拉取新版本").length).toBeGreaterThan(0);
+    expect(screen.getByText("18%")).toBeInTheDocument();
+    expect(screen.getByText("更新确认进度")).toBeInTheDocument();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2200);
     });
 
     expect(screen.getAllByText("等待服务恢复").length).toBeGreaterThan(0);
+    expect(screen.getByText("72%")).toBeInTheDocument();
     expect(screen.getByText("2 秒")).toBeInTheDocument();
     expect(screen.getByText("第 1 次检测")).toBeInTheDocument();
 
@@ -75,6 +78,43 @@ describe("UpdateIndicator", () => {
 
     expect(screen.getAllByText("更新完成").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "刷新页面" })).toBeInTheDocument();
+  });
+
+  it("explains which updater endpoint failed when Watchtower cannot be reached", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path.includes("/api/update/check")) {
+          return jsonResponse({
+            currentVersion: "0.1.8",
+            latestVersion: "0.1.9",
+            updateAvailable: true,
+            releaseUrl: "https://github.com/fubaiye/prompt-forge-local/releases/tag/v0.1.9",
+          });
+        }
+        if (path.includes("/api/update/apply") && init?.method === "POST") {
+          return jsonResponse(
+            {
+              status: "error",
+              error: "无法连接 Watchtower 更新器：请求 http://prompt-forge-updater:8080/v1/update 失败。原始错误：fetch failed",
+            },
+            502,
+          );
+        }
+        return jsonResponse({ error: "Unexpected request" }, 404);
+      }),
+    );
+
+    render(<UpdateIndicator />);
+
+    const updateButton = await screen.findByRole("button", { name: /更新到 0.1.9/ });
+    await act(async () => {
+      fireEvent.click(updateButton);
+    });
+
+    expect(screen.getByText(/失败位置：Watchtower 更新器/)).toBeInTheDocument();
+    expect(screen.getByText(/检查 NAS Docker 项目里的 prompt-forge-updater/)).toBeInTheDocument();
   });
 
   it("shows the real desktop updater download percent", async () => {
@@ -153,7 +193,7 @@ describe("UpdateIndicator", () => {
       fireEvent.click(updateButton);
     });
 
-    expect(screen.getByText(/GHCR 镜像仓库连接中断/)).toBeInTheDocument();
+    expect(screen.getAllByText(/GHCR 镜像仓库连接中断/).length).toBeGreaterThan(0);
     expect(screen.getByText(/可以稍后再次点击更新/)).toBeInTheDocument();
   });
 });

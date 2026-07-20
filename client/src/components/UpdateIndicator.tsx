@@ -17,6 +17,15 @@ interface UpdateProgress {
   bytesPerSecond?: number;
   elapsedSeconds?: number;
   checks?: number;
+  issue?: UpdateIssue;
+}
+
+interface UpdateIssue {
+  location: string;
+  reason: string;
+  suggestion: string;
+  rawMessage: string;
+  percent?: number;
 }
 
 interface DesktopUpdateCheck {
@@ -114,7 +123,7 @@ export function UpdateIndicator() {
       phase: "triggering",
       source: window.promptForgeUpdater ? "desktop" : "nas",
       targetVersion: update.latestVersion,
-      percent: window.promptForgeUpdater ? 0 : undefined,
+      percent: window.promptForgeUpdater ? 0 : nasPercentForPhase("triggering"),
       elapsedSeconds: window.promptForgeUpdater ? undefined : 0,
       checks: window.promptForgeUpdater ? undefined : 0,
       message: `正在触发更新到 ${update.latestVersion ?? "最新版本"}。`,
@@ -171,23 +180,26 @@ export function UpdateIndicator() {
           phase: "pulling",
           source: "nas",
           targetVersion: result.latestVersion,
+          percent: nasPercentForPhase("pulling"),
           elapsedSeconds: 0,
           checks: 0,
-          message: "更新器已收到请求，Docker 镜像拉取由 NAS / Watchtower 执行中。",
+          message: "更新器已收到请求，正在等待 NAS Docker 完成拉取、替换容器和版本确认。",
         });
         await waitForUpdateCompletion(result.latestVersion);
         return;
       }
       setStatus("available");
     } catch (error) {
-      const errorMessage = describeUpdateError(error);
+      const issue = describeUpdateError(error);
       setStatus("error");
-      setMessage(errorMessage);
+      setMessage(issue.reason);
       setProgress({
         phase: "error",
         source: window.promptForgeUpdater ? "desktop" : "nas",
         targetVersion: update.latestVersion,
-        message: errorMessage,
+        percent: issue.percent ?? 0,
+        message: issue.reason,
+        issue,
       });
     }
   }
@@ -211,26 +223,29 @@ export function UpdateIndicator() {
           setStatus("complete");
           return;
         }
+        const nextPhase = attempt < 2 ? "pulling" : "restarting";
         setProgress({
-          phase: attempt < 2 ? "pulling" : "restarting",
+          phase: nextPhase,
           source: "nas",
           targetVersion,
+          percent: nasPercentForAttempt(nextPhase, attempt),
           elapsedSeconds: elapsedSecondsForAttempt(attempt),
           checks: attempt + 1,
-          message: "更新器仍在处理。Docker 拉取镜像、替换容器和重启服务可能需要几分钟。",
+          message: `仍检测到旧版本 ${nextUpdate.currentVersion}。如果 NAS 正在拉取镜像，这是正常等待；若长时间停住，请查看 prompt-forge-updater 日志。`,
         });
       } catch {
         setProgress({
           phase: "restarting",
           source: "nas",
           targetVersion,
+          percent: nasPercentForAttempt("restarting", attempt),
           elapsedSeconds: elapsedSecondsForAttempt(attempt),
           checks: attempt + 1,
           message: "服务正在重启或网络暂时不可达，正在继续等待恢复。",
         });
       }
     }
-    throw new Error("更新已触发，但等待服务恢复超时。请稍后刷新页面，或查看 NAS Docker 日志。");
+    throw new Error(`等待服务恢复超时：已检测 ${MAX_POLL_ATTEMPTS} 次仍未确认目标版本。请查看 NAS Docker 项目日志，重点检查 prompt-forge 与 prompt-forge-updater 容器。`);
   }
 
   if (status === "idle" || (status === "checking" && !update)) return null;
@@ -239,7 +254,9 @@ export function UpdateIndicator() {
     status === "checking"
       ? "检查更新"
       : status === "applying"
-        ? "更新中..."
+        ? typeof progress?.percent === "number"
+          ? `更新中 ${Math.round(clampPercent(progress.percent))}%`
+          : "更新中..."
         : status === "error"
           ? update?.updateAvailable
             ? "重试更新"
@@ -302,12 +319,38 @@ function desktopProgressFromStatus(update: DesktopUpdateCheck): UpdateProgress |
   };
 }
 
-function describeUpdateError(error: unknown): string {
+function describeUpdateError(error: unknown): UpdateIssue {
   const rawMessage = error instanceof Error ? error.message : "更新失败";
   const normalized = rawMessage.toLowerCase();
 
+  if (rawMessage.includes("无法连接 Watchtower 更新器") || normalized.includes("prompt-forge-updater")) {
+    return {
+      location: "Watchtower 更新器",
+      reason: "应用已经尝试触发 NAS 自动更新，但没有连上 Watchtower HTTP API。",
+      suggestion: "检查 NAS Docker 项目里的 prompt-forge-updater 容器是否正在运行、项目内服务名是否仍为 prompt-forge-updater，并确认 8080 端口和 HTTP API 已启用。",
+      rawMessage,
+      percent: nasPercentForPhase("triggering"),
+    };
+  }
+
+  if (rawMessage.includes("Watchtower 更新器鉴权失败") || normalized.includes("401") || normalized.includes("403")) {
+    return {
+      location: "Watchtower 更新器鉴权",
+      reason: "Watchtower 收到了更新请求，但拒绝了当前 token。",
+      suggestion: "检查 docker-compose.nas.yml 中 PROMPT_FORGE_UPDATE_WEBHOOK_TOKEN 和 WATCHTOWER_HTTP_API_TOKEN 是否完全一致，然后重新部署项目。",
+      rawMessage,
+      percent: nasPercentForPhase("triggering"),
+    };
+  }
+
   if (normalized.includes("ghcr.io") && normalized.includes("unexpected eof")) {
-    return `GHCR 镜像仓库连接中断：NAS 在拉取 Docker 镜像时下载流提前断开。可以稍后再次点击更新，或在 Docker 项目里重新部署。原始错误：${rawMessage}`;
+    return {
+      location: "GHCR 镜像仓库",
+      reason: "GHCR 镜像仓库连接中断：NAS 在拉取 Docker 镜像时下载流提前断开。",
+      suggestion: "可以稍后再次点击更新；如果仍失败，在 NAS Docker 项目里重新部署，或导入 Release 里的 linux-amd64 本地镜像 tar。",
+      rawMessage,
+      percent: nasPercentForPhase("pulling"),
+    };
   }
 
   if (
@@ -316,10 +359,42 @@ function describeUpdateError(error: unknown): string {
       normalized.includes("request canceled") ||
       normalized.includes("waiting for connection"))
   ) {
-    return `GHCR 镜像仓库连接超时：NAS 访问 GitHub Container Registry 不稳定。可以稍后再次点击更新，或在 Docker 项目里重新部署。原始错误：${rawMessage}`;
+    return {
+      location: "GHCR 镜像仓库",
+      reason: "NAS 访问 GitHub Container Registry 超时或连接不稳定。",
+      suggestion: "稍后重试；如果 NAS 网络到 ghcr.io 不稳定，优先下载 Release 的 linux-amd64 本地镜像 tar 后在 Docker 中导入。",
+      rawMessage,
+      percent: nasPercentForPhase("pulling"),
+    };
   }
 
-  return rawMessage;
+  if (normalized.includes("waiting service") || rawMessage.includes("等待服务恢复超时")) {
+    return {
+      location: "服务恢复检测",
+      reason: "更新已触发，但应用一直没有检测到目标版本上线。",
+      suggestion: "查看 NAS Docker 项目日志，重点检查 prompt-forge 容器是否被替换、prompt-forge-updater 是否有拉取镜像失败记录。",
+      rawMessage,
+      percent: 92,
+    };
+  }
+
+  if (normalized.includes("error response from daemon") || normalized.includes("docker")) {
+    return {
+      location: "Docker 引擎",
+      reason: "Docker 在拉取、创建或替换容器时返回错误。",
+      suggestion: "打开 NAS Docker 项目日志，查看 daemon 原始错误；常见原因是镜像拉取失败、存储空间不足或 docker.sock 权限异常。",
+      rawMessage,
+      percent: nasPercentForPhase("pulling"),
+    };
+  }
+
+  return {
+    location: "更新流程",
+    reason: "更新请求没有完成，应用收到一个未分类错误。",
+    suggestion: "保留下面的原始错误，再重试一次；如果重复出现，请查看 NAS Docker 项目日志。",
+    rawMessage,
+    percent: 0,
+  };
 }
 
 function UpdateProgressPanel({
@@ -334,7 +409,7 @@ function UpdateProgressPanel({
   const percent = typeof progress.percent === "number" ? clampPercent(progress.percent) : undefined;
   const metric = progressMetric(progress);
   return (
-    <div className="update-progress-panel" role="status" aria-live="polite">
+    <div className={progress.phase === "error" ? "update-progress-panel error" : "update-progress-panel"} role="status" aria-live="polite">
       <div className="update-progress-heading">
         <strong>{progressTitle(progress.phase)}</strong>
         {progress.targetVersion && <span>目标版本 {progress.targetVersion}</span>}
@@ -344,6 +419,13 @@ function UpdateProgressPanel({
           <strong>{metric.value}</strong>
           <span>{metric.label}</span>
           {metric.detail && <small>{metric.detail}</small>}
+        </div>
+      )}
+      {progress.source === "nas" && progress.phase !== "error" && progress.phase !== "complete" && (
+        <div className="update-progress-facts">
+          {typeof progress.elapsedSeconds === "number" && <span>{formatElapsed(progress.elapsedSeconds)}</span>}
+          {typeof progress.checks === "number" && <span>第 {progress.checks} 次检测</span>}
+          <span>Watchtower 执行镜像拉取</span>
         </div>
       )}
       <div className={percent === undefined ? "update-progress-bar indeterminate" : "update-progress-bar"} aria-hidden="true">
@@ -357,12 +439,24 @@ function UpdateProgressPanel({
           </li>
         ))}
       </ol>
+      {progress.issue && <UpdateDiagnostics issue={progress.issue} />}
       <p>{progress.message}</p>
       {showRefresh && (
         <button type="button" className="secondary-action update-refresh-action" onClick={onRefresh}>
           刷新页面
         </button>
       )}
+    </div>
+  );
+}
+
+function UpdateDiagnostics({ issue }: { issue: UpdateIssue }) {
+  return (
+    <div className="update-diagnostics">
+      <strong>失败位置：{issue.location}</strong>
+      <span>{issue.reason}</span>
+      <span>建议：{issue.suggestion}</span>
+      <small>原始错误：{issue.rawMessage}</small>
     </div>
   );
 }
@@ -375,10 +469,16 @@ function progressTitle(phase: UpdatePhase): string {
 
 function progressMetric(progress: UpdateProgress): { value: string; label: string; detail?: string } | null {
   if (typeof progress.percent === "number") {
+    const nasDetail = progress.source === "nas" ? "此百分比来自触发、版本检测和服务恢复状态；Watchtower 不提供镜像字节流。" : undefined;
     return {
       value: `${Math.round(clampPercent(progress.percent))}%`,
-      label: progress.source === "desktop" && progress.phase !== "complete" ? "下载进度" : "完成进度",
-      detail: progress.transferred && progress.total ? `${formatBytes(progress.transferred)} / ${formatBytes(progress.total)}` : undefined,
+      label:
+        progress.source === "desktop" && progress.phase !== "complete"
+          ? "下载进度"
+          : progress.source === "nas" && progress.phase !== "complete"
+            ? "更新确认进度"
+            : "完成进度",
+      detail: progress.transferred && progress.total ? `${formatBytes(progress.transferred)} / ${formatBytes(progress.total)}` : nasDetail,
     };
   }
 
@@ -391,6 +491,20 @@ function progressMetric(progress: UpdateProgress): { value: string; label: strin
   }
 
   return null;
+}
+
+function nasPercentForPhase(phase: UpdatePhase): number {
+  if (phase === "triggering") return 8;
+  if (phase === "pulling") return 18;
+  if (phase === "restarting") return 72;
+  if (phase === "complete") return 100;
+  return 0;
+}
+
+function nasPercentForAttempt(phase: UpdatePhase, attempt: number): number {
+  if (phase === "pulling") return Math.min(58, 28 + attempt * 10);
+  if (phase === "restarting") return Math.min(92, 72 + Math.max(0, attempt - 1) * 3);
+  return nasPercentForPhase(phase);
 }
 
 function stepClass(step: UpdatePhase, current: UpdatePhase): string {

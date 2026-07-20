@@ -101,17 +101,31 @@ async function callUpdateWebhook(
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetcher(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      targetVersion: check.latestVersion,
-      releaseUrl: check.releaseUrl ?? "",
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetcher(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        targetVersion: check.latestVersion,
+        releaseUrl: check.releaseUrl ?? "",
+      }),
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`无法连接 Watchtower 更新器：请求 ${url} 失败。请检查 prompt-forge-updater 容器是否运行、服务名是否可解析、HTTP API 端口是否为 8080。原始错误：${detail}`);
+  }
 
   if (!response.ok) {
-    throw new Error(`Update webhook failed with ${response.status}`);
+    const detail = await response.text().catch(() => "");
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        `Watchtower 更新器鉴权失败：请求 ${url} 返回 ${response.status}。请检查 PROMPT_FORGE_UPDATE_WEBHOOK_TOKEN 是否与 WATCHTOWER_HTTP_API_TOKEN 一致。${detail ? `原始响应：${detail}` : ""}`,
+      );
+    }
+    throw new Error(
+      `Watchtower 更新器请求失败：请求 ${url} 返回 ${response.status}。请查看 prompt-forge-updater 容器日志。${detail ? `原始响应：${detail}` : ""}`,
+    );
   }
 }
 

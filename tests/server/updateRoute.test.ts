@@ -100,6 +100,66 @@ describe("update route", () => {
       }),
     );
   });
+
+  it("explains Watchtower authentication failures from the webhook", async () => {
+    const webhookFetch = vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      text: async () => "invalid api token",
+    }));
+
+    const app = express();
+    app.use(express.json());
+    app.use(
+      "/api/update",
+      createUpdateRouter({
+        currentVersion: "0.1.0",
+        repository: "fubaiye/prompt-forge-local",
+        updateWebhookUrl: "http://watchtower:8080/v1/update",
+        updateWebhookToken: "bad-token",
+        fetchLatestRelease: async () => ({
+          tag_name: "v0.2.0",
+          html_url: "https://github.com/fubaiye/prompt-forge-local/releases/tag/v0.2.0",
+        }),
+        fetchUpdateWebhook: webhookFetch as any,
+      }),
+    );
+
+    const response = await requestJson(app, "/api/update/apply", "POST");
+
+    expect(response.status).toBe(502);
+    expect(response.body.error).toMatch(/Watchtower 更新器鉴权失败/);
+    expect(response.body.error).toMatch(/http:\/\/watchtower:8080\/v1\/update/);
+  });
+
+  it("explains Watchtower connection failures from the webhook", async () => {
+    const webhookFetch = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+
+    const app = express();
+    app.use(express.json());
+    app.use(
+      "/api/update",
+      createUpdateRouter({
+        currentVersion: "0.1.0",
+        repository: "fubaiye/prompt-forge-local",
+        updateWebhookUrl: "http://watchtower:8080/v1/update",
+        updateWebhookToken: "nas-token",
+        fetchLatestRelease: async () => ({
+          tag_name: "v0.2.0",
+          html_url: "https://github.com/fubaiye/prompt-forge-local/releases/tag/v0.2.0",
+        }),
+        fetchUpdateWebhook: webhookFetch as any,
+      }),
+    );
+
+    const response = await requestJson(app, "/api/update/apply", "POST");
+
+    expect(response.status).toBe(502);
+    expect(response.body.error).toMatch(/无法连接 Watchtower 更新器/);
+    expect(response.body.error).toMatch(/http:\/\/watchtower:8080\/v1\/update/);
+  });
 });
 
 async function requestJson(app: Express, path: string, method: "GET" | "POST"): Promise<{ status: number; body: any }> {

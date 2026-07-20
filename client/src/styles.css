@@ -184,12 +184,16 @@ textarea:focus-visible {
   top: calc(100% + 10px);
   right: 0;
   z-index: 70;
-  width: min(360px, calc(100vw - 32px));
+  width: min(420px, calc(100vw - 32px));
   border: 1px solid var(--border-strong);
   border-radius: 14px;
   padding: 14px;
   background: var(--bg-elevated);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+}
+
+.update-progress-panel.error {
+  border-color: rgba(248, 113, 113, 0.28);
 }
 
 .update-progress-heading {
@@ -225,6 +229,10 @@ textarea:focus-visible {
   transition: width 0.25s ease;
 }
 
+.update-progress-panel.error .update-progress-bar span {
+  background: #ef4444;
+}
+
 .update-progress-bar.indeterminate span {
   width: 38%;
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
@@ -255,6 +263,23 @@ textarea:focus-visible {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.update-progress-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.update-progress-facts span {
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 11px;
+  line-height: 1;
 }
 
 @keyframes update-progress-slide {
@@ -307,6 +332,34 @@ textarea:focus-visible {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.update-diagnostics {
+  display: grid;
+  gap: 7px;
+  border: 1px solid rgba(248, 113, 113, 0.24);
+  border-radius: 12px;
+  margin: 0 0 10px;
+  padding: 10px;
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.update-diagnostics strong {
+  color: #fee2e2;
+  font-size: 13px;
+}
+
+.update-diagnostics span,
+.update-diagnostics small {
+  color: #fecaca;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.update-diagnostics small {
+  color: rgba(254, 202, 202, 0.78);
 }
 
 .update-refresh-action {
