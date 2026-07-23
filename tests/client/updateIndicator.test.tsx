@@ -60,6 +60,7 @@ describe("UpdateIndicator", () => {
 
     expect(screen.getAllByText("触发更新器").length).toBeGreaterThan(0);
     expect(screen.getAllByText("拉取新版本").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "更新中(18%)" })).toBeInTheDocument();
     expect(screen.getByText("18%")).toBeInTheDocument();
     expect(screen.getByText("更新确认进度")).toBeInTheDocument();
 
@@ -68,6 +69,7 @@ describe("UpdateIndicator", () => {
     });
 
     expect(screen.getAllByText("等待服务恢复").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "更新中(72%)" })).toBeInTheDocument();
     expect(screen.getByText("72%")).toBeInTheDocument();
     expect(screen.getByText("2 秒")).toBeInTheDocument();
     expect(screen.getByText("第 1 次检测")).toBeInTheDocument();
@@ -155,6 +157,7 @@ describe("UpdateIndicator", () => {
     });
 
     expect(screen.getByText("47%")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "更新中(47%)" })).toBeInTheDocument();
     expect(screen.getByText("下载进度")).toBeInTheDocument();
     expect(screen.getByText(/47 MB \/ 100 MB/)).toBeInTheDocument();
   });

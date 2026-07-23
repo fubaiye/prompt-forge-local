@@ -255,7 +255,7 @@ export function UpdateIndicator() {
       ? "检查更新"
       : status === "applying"
         ? typeof progress?.percent === "number"
-          ? `更新中 ${Math.round(clampPercent(progress.percent))}%`
+          ? `更新中(${Math.round(clampPercent(progress.percent))}%)`
           : "更新中..."
         : status === "error"
           ? update?.updateAvailable
