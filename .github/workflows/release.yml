@@ -58,10 +58,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build NAS Docker image tar
+      - name: Build NAS Docker image tar for amd64
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -69,7 +72,15 @@ jobs:
           tags: prompt-forge-local:${{ github.ref_name }}
           outputs: type=docker,dest=release/prompt-forge-local-${{ github.ref_name }}-linux-amd64.tar
 
+      - name: Build NAS Docker image tar for arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          tags: prompt-forge-local:${{ github.ref_name }}
+          outputs: type=docker,dest=release/prompt-forge-local-${{ github.ref_name }}-linux-arm64.tar
+
       - name: Publish NAS Docker image tar
-        run: gh release upload "$GITHUB_REF_NAME" release/prompt-forge-local-*-linux-amd64.tar --repo "$GITHUB_REPOSITORY" --clobber
+        run: gh release upload "$GITHUB_REF_NAME" release/prompt-forge-local-*-linux-amd64.tar release/prompt-forge-local-*-linux-arm64.tar --repo "$GITHUB_REPOSITORY" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
