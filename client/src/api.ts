@@ -29,9 +29,10 @@ export async function apiJson<T>(path: string, options: RequestInit = {}): Promi
       ...(options.headers ?? {}),
     },
   });
-  const data = await response.json().catch(() => null);
+  const rawText = await response.text().catch(() => "");
+  const data = parseJson(rawText);
   if (!response.ok) {
-    throw new Error(data?.error || `Request failed with ${response.status}`);
+    throw new Error(apiErrorMessage(path, response.status, data, rawText));
   }
   return data as T;
 }
@@ -39,9 +40,27 @@ export async function apiJson<T>(path: string, options: RequestInit = {}): Promi
 export async function apiEmpty(path: string, options: RequestInit = {}): Promise<void> {
   const response = await fetch(path, options);
   if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    throw new Error(data?.error || `Request failed with ${response.status}`);
+    const rawText = await response.text().catch(() => "");
+    const data = parseJson(rawText);
+    throw new Error(apiErrorMessage(path, response.status, data, rawText));
   }
+}
+
+function parseJson(rawText: string): unknown {
+  if (!rawText.trim()) return null;
+  try {
+    return JSON.parse(rawText);
+  } catch {
+    return null;
+  }
+}
+
+function apiErrorMessage(path: string, status: number, data: unknown, rawText: string): string {
+  const error = data && typeof data === "object" && "error" in data ? (data as { error?: unknown }).error : undefined;
+  if (typeof error === "string" && error.trim()) return error;
+
+  const detail = rawText.trim().replace(/\s+/g, " ").slice(0, 500);
+  return detail ? `Request failed with ${status} at ${path}: ${detail}` : `Request failed with ${status} at ${path}`;
 }
 
 export function listProviders(): Promise<MaskedProvider[]> {

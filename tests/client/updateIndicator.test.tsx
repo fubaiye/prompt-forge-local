@@ -199,6 +199,41 @@ describe("UpdateIndicator", () => {
     expect(screen.getAllByText(/GHCR 镜像仓库连接中断/).length).toBeGreaterThan(0);
     expect(screen.getByText(/可以稍后再次点击更新/)).toBeInTheDocument();
   });
+
+  it("explains plain 502 responses from the update API gateway", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path.includes("/api/update/check")) {
+          return jsonResponse({
+            currentVersion: "0.1.12",
+            latestVersion: "0.1.13",
+            updateAvailable: true,
+            releaseUrl: "https://github.com/fubaiye/prompt-forge-local/releases/tag/v0.1.13",
+          });
+        }
+        if (path.includes("/api/update/apply") && init?.method === "POST") {
+          return new Response("502 Bad Gateway: upstream disconnected", {
+            status: 502,
+            headers: { "Content-Type": "text/plain" },
+          });
+        }
+        return jsonResponse({ error: "Unexpected request" }, 404);
+      }),
+    );
+
+    render(<UpdateIndicator />);
+
+    const updateButton = await screen.findByRole("button", { name: /更新到 0.1.13/ });
+    await act(async () => {
+      fireEvent.click(updateButton);
+    });
+
+    expect(screen.getByText(/失败位置：更新 API \/ 服务网关/)).toBeInTheDocument();
+    expect(screen.getAllByText(/后端或 NAS 网关返回了 502/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/502 Bad Gateway: upstream disconnected/)).toBeInTheDocument();
+  });
 });
 
 function jsonResponse(body: unknown, status = 200): Response {

@@ -388,6 +388,20 @@ function describeUpdateError(error: unknown): UpdateIssue {
     };
   }
 
+  if (
+    normalized.includes("request failed with 502") ||
+    normalized.includes("bad gateway") ||
+    normalized.includes("/api/update/apply")
+  ) {
+    return {
+      location: "更新 API / 服务网关",
+      reason: "后端或 NAS 网关返回了 502，更新请求没有进入可正常返回诊断信息的服务路径。",
+      suggestion: "先查看 prompt-forge 容器日志和 NAS Docker 项目事件；如果日志里没有更新请求，重点检查 NAS 的反向代理、端口映射和容器是否刚好在重启。",
+      rawMessage,
+      percent: nasPercentForPhase("triggering"),
+    };
+  }
+
   return {
     location: "更新流程",
     reason: "更新请求没有完成，应用收到一个未分类错误。",
